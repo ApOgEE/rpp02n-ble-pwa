@@ -102,3 +102,7 @@ This repository currently has no license file. Do not assume that its code is li
 ## Graphic print test
 
 The Printer page includes a monochrome 384 × 360 pixel preview with a QR code linking to the hosted PWA, simple battery/power/Bluetooth icons, and a formatted heading. **Refresh preview** regenerates the bitmap and **Print graphic test** sends an ESC/POS `GS v 0` raster image through the existing `0xFF02` BLE characteristic using 20-byte chunks with 50 ms pacing. The QR matrix is embedded for the project's fixed GitHub Pages URL, so no external QR service is required. The graphic print path is experimental: support for `GS v 0` depends on the RPP02N firmware, and transmission can take approximately a minute. The preview is not a guarantee of printer output.
+
+### Adjustable graphic print settings
+
+Before printing, choose BLE delay (0/5/10/20/50 ms), bitmap height (160/240/360 px), and BLE chunk size (20/40/100 bytes) in **Graphic BLE settings**. Defaults are 50 ms, 360 px and 20 bytes. Changes are stored in browser localStorage. A transfer estimate is shown and actual transfer time and throughput are logged after sending. Values above 20 bytes are experimental and may fail due to negotiated BLE MTU limits. The bitmap preview scales uniformly to keep QR modules square; smaller heights can reduce QR readability. Text receipt printing retains the original 20-byte / 50-ms pacing.
