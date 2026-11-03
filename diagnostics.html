@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#0f766e"><link rel="manifest" href="manifest.webmanifest">
 <title>RPP02N Printer Diagnostics</title>
 <style>
-:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f3f6f7}*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:650px;margin:auto}h1{font-size:1.5rem}.panel{background:#fff;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000a}button{border:0;border-radius:9px;padding:12px 15px;background:#0f766e;color:#fff;font-weight:650;margin:4px 5px 4px 0}button.secondary{background:#475569}button:disabled{opacity:.45}nav a{display:inline-block;padding:9px 12px;color:#0f766e;font-weight:700;text-decoration:none}nav a[aria-current]{background:#d1fae5;border-radius:8px}.muted{color:#475569;font-size:.9rem;line-height:1.5}.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stat{background:#f3f6f7;border-radius:10px;padding:14px}.stat strong{display:block;font-size:1.25rem;margin:6px 0}#log,#details{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;font:12px/1.6 monospace;max-height:420px;overflow:auto}#details{background:#eef2f5;color:#17212b}#status{font-weight:700}
+:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f3f6f7}*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:650px;margin:auto}h1{font-size:1.5rem}.panel{background:#fff;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000a}button{border:0;border-radius:9px;padding:12px 15px;background:#0f766e;color:#fff;font-weight:650;margin:4px 5px 4px 0}button.secondary{background:#475569}button:disabled{opacity:.45}nav a{display:inline-block;padding:9px 12px;color:#0f766e;font-weight:700;text-decoration:none}nav a[aria-current]{background:#d1fae5;border-radius:8px}.muted{color:#475569;font-size:.9rem;line-height:1.5}.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stat{background:#f3f6f7;border-radius:10px;padding:14px}.stat strong{display:block;font-size:1.25rem;margin:6px 0}#log,#details{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;font:12px/1.6 monospace;max-height:420px;overflow:auto}#details{background:#eef2f5;color:#17212b}#status{font-weight:700}#notifications{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;font:12px/1.6 monospace;max-height:360px;overflow:auto}
 </style>
 </head>
 <body><main><nav class="panel" aria-label="Navigasi"><a href="./index.html">🖨️ Printer</a> <a href="./gatt.html">🔎 GATT Explorer</a> <a href="./identity.html">🪪 Identity Inspector</a> <a href="./diagnostics.html" aria-current="page">🩺 Diagnostics</a></nav>
@@ -13,18 +13,83 @@
 <section class="panel"><div>Status: <span id="status">Belum disambung</span></div><p id="deviceName" class="muted">Printer: RPP02N</p><button id="connect">Connect &amp; inspect</button><button id="inspect" disabled>Refresh diagnostics</button><button id="disconnect" class="secondary" disabled>Disconnect</button></section>
 <section class="panel"><h2>Printer status</h2><div class="stats"><div class="stat">Battery level<strong id="battery">Unknown</strong><span id="batteryNote" class="muted">Belum diperiksa</span></div><div class="stat">Paper / printer<strong id="paper">Unknown</strong><span class="muted">Memerlukan protokol respons printer yang disahkan</span></div></div><p class="muted">Battery Level hanya dipaparkan apabila characteristic standard 0x2A19 berjaya dibaca. Tiada anggaran bateri daripada RSSI atau voltan.</p></section>
 <section class="panel"><h2>Accessible GATT services</h2><pre id="details">Belum diperiksa.</pre><p class="muted">Hanya service yang dibenarkan oleh Web Bluetooth boleh dilihat. Characteristic vendor-specific disenaraikan bersama properties; ia tidak dibaca atau ditulis secara automatik.</p></section>
+<section class="panel"><h2>BLE Notification Monitor</h2><p class="muted">Subscribe hanya kepada FF01 dan FF03 (service FF00). Tiada arahan vendor-specific atau print dihantar. Langganan GATT mengubah konfigurasi notification pada sambungan ini.</p><button id="subscribe" disabled>Subscribe FF01 + FF03</button><button id="unsubscribe" class="secondary" disabled>Unsubscribe</button><p id="monitorStatus" class="muted">Not subscribed</p><pre id="notifications" aria-live="polite">Belum ada notification.</pre><button id="clearNotifications" class="secondary">Clear notifications</button><p class="muted">Eksport JSON di bawah merangkumi notification (timestamp, characteristic, HEX, Base64). Data mungkin mengandungi maklumat peranti; semak sebelum berkongsi.</p></section>
 <section class="panel"><h2>Diagnostic log</h2><pre id="log" aria-live="polite"></pre><button id="export" class="secondary">Export JSON</button><button id="clear" class="secondary">Clear log</button></section>
 <p class="muted">Disconnect printer daripada halaman PWA lain atau nRF Connect sebelum menggunakan diagnostics. Web Bluetooth tidak mendedahkan negotiated MTU secara langsung.</p></main>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
 const BATTERY=0x180F, LEVEL=0x2A19, PRINT_SERVICE=0xFF00;
-let device=null,server=null,busy=false;
+let device=null,server=null,busy=false,monitorBusy=false;
+const subscriptions=new Map(),notificationRecords=[];
+let monitorSession=0;
 const records=[],snapshot={timestamp:null,deviceName:null,connection:'disconnected',batteryPercent:null,batteryStatus:'not checked',paperStatus:'unknown (not queried)',services:[]};
 function log(message){const entry={time:new Date().toISOString(),message};records.push(entry);$('log').textContent+=entry.time+' '+message+'\n';}
 function connected(){return !!(device?.gatt?.connected&&server);}
-function refresh(){const ok=connected();$('status').textContent=ok?'Connected':'Belum disambung';$('connect').disabled=busy||ok;$('inspect').disabled=busy||!ok;$('disconnect').disabled=busy||!ok;snapshot.connection=ok?'connected':'disconnected';}
-function onDisconnected(){server=null;log('GATT disconnected');refresh();}
+function refresh(){const ok=connected();$('status').textContent=ok?'Connected':'Belum disambung';$('connect').disabled=busy||ok;$('inspect').disabled=busy||!ok;$('disconnect').disabled=busy||!ok;snapshot.connection=ok?'connected':'disconnected';$('subscribe').disabled=busy||monitorBusy||!ok||subscriptions.size===2;$('unsubscribe').disabled=monitorBusy||subscriptions.size===0;$('monitorStatus').textContent=monitorBusy?'Updating subscriptions...':subscriptions.size?'Subscribed: '+[...subscriptions.keys()].join(', '):'Not subscribed';}
+function onDisconnected(){
+ monitorSession++;
+ for(const {characteristic,handler} of subscriptions.values())characteristic.removeEventListener('characteristicvaluechanged',handler);
+ subscriptions.clear();monitorBusy=false;server=null;log('GATT disconnected; notification subscriptions cleared');refresh();
+}
+function encodeBase64(bytes){
+ // Small BLE packets, encoded without assuming printable UTF-8.
+ let binary='';for(const b of bytes)binary+=String.fromCharCode(b);
+ return btoa(binary);
+}
+function notificationHandler(uuid,session){
+ return event=>{
+  if(session!==monitorSession||!connected())return;
+  const value=event.target.value;
+  if(!value)return;
+  const bytes=new Uint8Array(value.buffer,value.byteOffset,value.byteLength);
+  const entry={timestamp:new Date().toISOString(),characteristic:uuid,byteLength:bytes.length,hex:Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(' ').toUpperCase(),base64:encodeBase64(bytes)};
+  notificationRecords.push(entry);
+  if(notificationRecords.length===1)$('notifications').textContent='';
+  $('notifications').textContent+=entry.timestamp+' '+entry.characteristic+' ('+entry.byteLength+' bytes)\nHEX: '+entry.hex+'\nBase64: '+entry.base64+'\n\n';
+  $('notifications').scrollTop=$('notifications').scrollHeight;
+ };
+}
+async function subscribe(){
+ if(!connected()||monitorBusy)return;
+ monitorBusy=true;refresh();const session=monitorSession;
+ try{
+  const service=await server.getPrimaryService(PRINT_SERVICE);
+  for(const id of [0xFF01,0xFF03]){
+   if(session!==monitorSession||!connected())break;
+   const uuid='0x'+id.toString(16).toUpperCase();
+   if(subscriptions.has(uuid))continue;
+   try{
+    const characteristic=await service.getCharacteristic(id);
+    if(!characteristic.properties.notify)throw new Error('Notify not supported');
+    const handler=notificationHandler(uuid,session);
+    characteristic.addEventListener('characteristicvaluechanged',handler);
+    try{
+     await characteristic.startNotifications();
+     if(session!==monitorSession||!connected()){
+      characteristic.removeEventListener('characteristicvaluechanged',handler);
+      if(connected())await characteristic.stopNotifications().catch(()=>{});
+      break;
+     }
+     subscriptions.set(uuid,{characteristic,handler});
+     log('Subscribed '+uuid);
+    }catch(e){characteristic.removeEventListener('characteristicvaluechanged',handler);throw e;}
+   }catch(e){log('SUBSCRIBE '+uuid+' ERROR: '+e.message);}
+  }
+ }catch(e){log('SUBSCRIBE ERROR: '+e.message);}
+ finally{monitorBusy=false;refresh();}
+}
+async function unsubscribe(){
+ if(monitorBusy||!subscriptions.size)return;
+ monitorBusy=true;refresh();
+ const active=[...subscriptions.entries()];subscriptions.clear();
+ for(const [uuid,{characteristic,handler}] of active){
+  characteristic.removeEventListener('characteristicvaluechanged',handler);
+  try{if(connected())await characteristic.stopNotifications();log('Unsubscribed '+uuid);}
+  catch(e){log('UNSUBSCRIBE '+uuid+' ERROR: '+e.message);}
+ }
+ monitorBusy=false;refresh();
+}
 function resetResults(){$('battery').textContent='Unknown';$('batteryNote').textContent='Belum diperiksa';$('paper').textContent='Unknown';snapshot.batteryPercent=null;snapshot.batteryStatus='not checked';snapshot.services=[];$('details').textContent='Memeriksa...';}
 async function inspect(){
  if(!connected())return;
@@ -68,7 +133,7 @@ async function connect(){
  try{
   if(!navigator.bluetooth)throw new Error('Web Bluetooth tidak tersedia pada browser ini.');
   device=await navigator.bluetooth.requestDevice({filters:[{name:'RPP02N'}],optionalServices:[BATTERY,PRINT_SERVICE]});
-  device.addEventListener('gattserverdisconnected',onDisconnected);
+  monitorSession++;device.addEventListener('gattserverdisconnected',onDisconnected);
   snapshot.deviceName=device.name||'Unknown';$('deviceName').textContent='Printer: '+snapshot.deviceName;
   server=await device.gatt.connect();log('Connected to '+snapshot.deviceName);
  }catch(e){log('CONNECT ERROR: '+e.message);server=null;if(device?.gatt?.connected)device.gatt.disconnect();}
@@ -78,9 +143,12 @@ async function connect(){
 $('connect').addEventListener('click',connect);
 $('inspect').addEventListener('click',inspect);
 $('disconnect').addEventListener('click',()=>device?.gatt?.disconnect());
+$('subscribe').addEventListener('click',subscribe);
+$('unsubscribe').addEventListener('click',unsubscribe);
+$('clearNotifications').addEventListener('click',()=>{notificationRecords.length=0;$('notifications').textContent='Belum ada notification.';});
 $('clear').addEventListener('click',()=>{records.length=0;$('log').textContent='';});
 $('export').addEventListener('click',()=>{
- const blob=new Blob([JSON.stringify({diagnostics:snapshot,log:records},null,2)],{type:'application/json'});
+ const blob=new Blob([JSON.stringify({diagnostics:snapshot,notifications:notificationRecords,log:records},null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='rpp02n-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(e=>log('SW: '+e.message)));
