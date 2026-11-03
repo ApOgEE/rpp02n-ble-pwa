@@ -1,26 +1,100 @@
-# RPP02N BLE PWA — printer + GATT explorer
+# RPP02N Web Bluetooth PWA
 
-Two pages: `index.html` (existing ESC/POS printing) and `gatt.html` (GATT inspection). Both pages have navigation links.
+A lightweight Progressive Web App (PWA) for **printing ESC/POS receipts directly to an RPP02N Bluetooth Low Energy (BLE) thermal printer**, exploring GATT services, and inspecting standard BLE device identity information.
 
-## Deploy to GitHub Pages
+**[Launch the PWA](https://apogee.github.io/rpp02n-ble-pwa/)** · **[Repository](https://github.com/ApOgEE/rpp02n-ble-pwa)**
 
-Copy the **contents** of this directory to the root of your existing `rpp02n-ble-pwa` Git repository, preserving the existing Git history. Commit and push. The site should serve `/rpp02n-ble-pwa/index.html` and `/rpp02n-ble-pwa/gatt.html`. Refresh after deployment to update the service-worker cache.
+> This is a browser-based proof of concept, not a production printer driver or a validated BMS monitoring application.
 
-## GATT explorer
+## Features
 
-1. Disconnect the printer from the print page / nRF Connect.
-2. Open GATT Explorer and tap Connect & Discover. Select RPP02N.
-3. Explore accessible services and characteristics. Tap Read only on characteristics advertising READ; optionally Subscribe to NOTIFY/INDICATE.
-4. Export JSON for analysis. **No characteristic writes are performed by the GATT page.**
+| Page | Function |
+| --- | --- |
+| [Printer](index.html) | Connect to an RPP02N, print a test message, or send a simple ESC/POS text receipt. |
+| [GATT Explorer](gatt.html) | List accessible GATT services and characteristics, read values, subscribe to notifications/indications, and export JSON logs. |
+| [Device Identity Inspector](identity.html) | Read standard identity characteristics such as device name, serial number, system ID, model, firmware and manufacturer **when available**, and export JSON. |
 
-`optionalServices` includes known RPP02N services `0x18F0`, `0xFF00`, `0xFEE7` and some standard services. Other services may be inaccessible unless explicitly authorized. Reading unknown characteristics may return errors or sensitive values; share exported logs selectively.
+Built with plain HTML, CSS, and JavaScript. No build tools, backend, or native Android bridge are required.
 
-## Limitations
+## Quick start
 
-Web Bluetooth does not expose BLE MAC addresses. Browser device IDs are browser-origin scoped. Disconnect/reconnect between pages; a page navigation does not preserve its active GATT connection. BLE requires HTTPS or localhost and browser support (Brave may need its Web Bluetooth flag).
+1. Open **https://apogee.github.io/rpp02n-ble-pwa/** in a Web Bluetooth-capable browser, such as Chrome on supported Android devices.
+2. Enable Bluetooth and power on the RPP02N printer.
+3. Select **Connect** and choose the printer from the browser's Bluetooth device picker.
+4. Select **Print TEST PWA**, or edit the receipt and choose **Print resit**.
+5. Disconnect before using GATT Explorer or Device Identity Inspector with the same device.
+
+Web Bluetooth requires **HTTPS or localhost**, compatible hardware, browser support, and user permission. Some Brave builds may require enabling Web Bluetooth in browser settings or flags.
+
+## Printing protocol
+
+The tested RPP02N path uses:
+
+| Parameter | Value |
+| --- | --- |
+| GATT service | `0xFF00` |
+| Write characteristic | `0xFF02` |
+| Format | ESC/POS initialization (`ESC @`), UTF-8 text, and line feeds |
+| Transmission | 20-byte chunks, 50 ms delay between chunks |
+
+The app uses a supported GATT write method to transmit the data. A successful BLE write does not guarantee the receipt physically printed. Advanced ESC/POS functions and printer-specific character encodings are outside this proof of concept.
+
+## GATT Explorer
+
+The [GATT Explorer](gatt.html) displays UUIDs and properties for services and characteristics the browser is authorized to access. Use **Read** for characteristics advertising `read`, or **Subscribe** for characteristics supporting `notify` or `indicate`. **Export JSON** saves discovery results and event logs.
+
+The explorer does not issue application-level characteristic writes. Only services requested or permitted by Web Bluetooth may be visible, so the results may not represent the device's complete GATT database.
 
 ## Device Identity Inspector
 
-Open `identity.html` from the navigation. This read-only tool requests access to standard Generic Access (`0x1800`) and optional Device Information (`0x180A`) GATT services. It attempts to read Device Name, Appearance, System ID, Model Number, Serial Number, firmware/hardware/software revisions, Manufacturer Name, regulatory data and PnP ID when supported, and exports a JSON report.
+The [Device Identity Inspector](identity.html) attempts read-only access to standard characteristics:
 
-It never sends GATT writes or BMS control commands. Web Bluetooth browser IDs are not Bluetooth MAC addresses; a characteristic may be absent or not readable. In particular, no unique identifier is guaranteed for RPP02N or JBD BMS. Select the JBD filter only when testing near the BMS, and do not alter an operating off-grid power system.
+| Service | Characteristics |
+| --- | --- |
+| Generic Access (`0x1800`) | Device Name (`0x2A00`), Appearance (`0x2A01`) |
+| Device Information (`0x180A`) | System ID (`0x2A23`), Model (`0x2A24`), Serial Number (`0x2A25`), Firmware (`0x2A26`), Manufacturer (`0x2A29`) and other standard fields |
+
+These characteristics are optional. On the tested RPP02N, Device Name was readable, but Device Information Service (`0x180A`) was not available.
+
+**Web Bluetooth does not expose a raw Bluetooth MAC address.** Its `BluetoothDevice.id` is a browser-generated identifier, not a MAC address. Devices sharing the same name or GATT UUIDs cannot necessarily be distinguished without a unique readable identity value. The JBD-named filter is an inspection option, **not** a validated JBD BMS integration.
+
+## Project structure
+
+```text
+index.html            Printer and receipt printing
+gatt.html             GATT service and characteristic explorer
+identity.html         Read-only device identity inspector
+manifest.webmanifest  PWA manifest
+sw.js                 Service worker and offline asset cache
+icon.svg              App icon
+README.md             Project documentation
+```
+
+## Run locally
+
+```bash
+git clone https://github.com/ApOgEE/rpp02n-ble-pwa.git
+cd rpp02n-ble-pwa
+python3 -m http.server 8000
+```
+
+Open **http://localhost:8000/** on the same machine in a compatible browser. For Android testing, use the HTTPS GitHub Pages deployment or another HTTPS environment; plain HTTP via a LAN IP is generally not a secure context.
+
+To publish your fork, enable GitHub Pages for the repository root on the appropriate branch. Reload after deployment if the PWA service worker has cached an older version.
+
+## Limitations and safety
+
+- Web Bluetooth support, permissions, service visibility, and connection persistence depend on the browser and device.
+- Navigating between pages or suspending the browser may disconnect GATT; reconnect when needed.
+- GATT Explorer and Identity Inspector do not send characteristic write commands; notification subscriptions still use standard GATT subscription operations.
+- The Printer page **does** intentionally send ESC/POS print data.
+- Never send exploratory control writes to safety-critical equipment. Do not use this proof of concept to change settings on an operational off-grid BMS.
+- Exported JSON may contain device identifiers or telemetry; review before sharing.
+
+## Contributing
+
+Issues and pull requests are welcome. Include your browser, operating system, BLE device model, and sanitized logs when reporting compatibility issues.
+
+## License
+
+This repository currently has no license file. Do not assume that its code is licensed for redistribution or reuse unless the maintainer adds an explicit license.
