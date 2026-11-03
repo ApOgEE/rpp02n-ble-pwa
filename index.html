@@ -10,11 +10,11 @@
 </head>
 <body><main><nav class="panel tabs" aria-label="App tabs"><button type="button" data-tab="print" aria-selected="true">🖨️ Print</button><button type="button" data-tab="diagnostics" aria-selected="false">🩺 Diagnostics</button><button type="button" data-tab="gatt" aria-selected="false">🔎 GATT Explorer</button><button type="button" data-tab="identity" aria-selected="false">🪪 Identity Inspector</button></nav><div class="panel">Shared BLE: <strong id="sharedStatus">Disconnected</strong> <span id="sharedName" class="muted"></span> <button id="sharedConnect">Connect</button><button id="sharedDisconnect" class="secondary" disabled>Disconnect</button></div><div id="tab-print" class="tab-page"><h1>🖨️ RPP02N — Direct BLE Print</h1><p class="muted">Chrome Android · Web Bluetooth · ESC/POS · Service FF00 / Characteristic FF02</p>
 <section class="panel"><div>Status: <span id="status">Belum disambung</span></div><p class="muted" id="deviceInfo">Printer: RPP02N</p><button id="connect">Connect</button><button id="disconnect" class="secondary" disabled>Disconnect</button></section>
-<section class="panel"><h2>Test print</h2><button id="test" disabled>Print TEST PWA</button><label for="receipt">Teks resit (ASCII untuk ujian pertama)</label><textarea id="receipt">KEDAI SAYA\n------------------------------\nKopi O              RM 2.50\nRoti Canai          RM 1.50\n------------------------------\nTOTAL               RM 4.00\nTerima kasih!</textarea><button id="print" disabled>Print resit</button><h3>Graphic print test</h3><p class="muted">Preview bitmap monokrom 384-dot dengan QR code pautan PWA ini, ikon ringkas, teks dan corak ujian. Grafik dihantar sebagai ESC/POS raster image (GS v 0); sokongan firmware printer perlu diuji.</p><canvas id="graphicPreview" class="graphic-preview" width="384" height="360" role="img" aria-label="Preview resit ujian grafik"></canvas><fieldset class="ble-settings"><legend><strong>Graphic BLE settings</strong></legend><label for="bleDelay">BLE delay</label><select id="bleDelay"><option value="50">50 ms (default / conservative)</option><option value="20">20 ms</option><option value="10">10 ms</option><option value="5">5 ms (experimental)</option><option value="0">0 ms (experimental)</option></select><label for="bitmapHeight">Bitmap height</label><select id="bitmapHeight"><option value="360">360 px (full layout)</option><option value="240">240 px (compact)</option><option value="160">160 px (minimal)</option></select><label for="bleChunk">BLE chunk size</label><select id="bleChunk"><option value="20">20 bytes (safe default)</option><option value="40">40 bytes (experimental)</option><option value="100">100 bytes (tested)</option><option value="150">150 bytes (experimental)</option><option value="200">200 bytes (benchmark)</option><option value="220">220 bytes (experimental)</option><option value="237">237 bytes (ATT MTU 240 theoretical limit)</option></select><output id="graphicEstimate" aria-live="polite"></output><p class="muted">MTU 240 bytes diukur melalui nRF Connect (payload ATT Write maksimum teoritikal 237 bytes). Sambungan Web Bluetooth mungkin berbeza; saiz melebihi 100 bytes belum disahkan. Tetapan disimpan pada browser ini sahaja. Jika cetakan terputus, kembali ke 100 bytes / 0ms atau 20 bytes / 50 ms.</p></fieldset><div class="graphic-actions"><button id="previewGraphic" class="secondary">Refresh preview</button><button id="printGraphic" disabled>Print graphic test</button><button id="benchmark200" disabled>Benchmark 200 bytes · 0ms</button></div><p class="muted">QR mengandungi https://apogee.github.io/rpp02n-ble-pwa/ . Anggaran penghantaran grafik 384×360 piksel mengambil masa lebih lama daripada teks kerana BLE chunk 20 byte.</p><p class="muted">ESC @ (initialize), teks dan tiga newline. Chunk 20 byte, jeda 50 ms. Tidak termasuk cut atau cash drawer.</p></section>
+<section class="panel"><h2>Printer Status Manager</h2><p>Readiness: <strong id="printerReadiness" aria-live="polite">UNKNOWN</strong></p><p class="muted" id="printerStatusDetail">Connect and check status. Cover-open and paper-out cannot be distinguished by this printer.</p><button id="checkPrinterStatus" type="button">Check Status</button><label><input id="prePrintCheck" type="checkbox"> Check readiness before every print (optional)</label><p class="muted">Checks DLE EOT 4 via FF02/FF01; timeout or disconnect is UNKNOWN. No automatic polling. This does not confirm physical printing.</p></section><section class="panel"><h2>Test print</h2><button id="test" disabled>Print TEST PWA</button><label for="receipt">Teks resit (ASCII untuk ujian pertama)</label><textarea id="receipt">KEDAI SAYA\n------------------------------\nKopi O              RM 2.50\nRoti Canai          RM 1.50\n------------------------------\nTOTAL               RM 4.00\nTerima kasih!</textarea><button id="print" disabled>Print resit</button><h3>Graphic print test</h3><p class="muted">Preview bitmap monokrom 384-dot dengan QR code pautan PWA ini, ikon ringkas, teks dan corak ujian. Grafik dihantar sebagai ESC/POS raster image (GS v 0); sokongan firmware printer perlu diuji.</p><canvas id="graphicPreview" class="graphic-preview" width="384" height="360" role="img" aria-label="Preview resit ujian grafik"></canvas><fieldset class="ble-settings"><legend><strong>Graphic BLE settings</strong></legend><label for="bleDelay">BLE delay</label><select id="bleDelay"><option value="50">50 ms (default / conservative)</option><option value="20">20 ms</option><option value="10">10 ms</option><option value="5">5 ms (experimental)</option><option value="0">0 ms (experimental)</option></select><label for="bitmapHeight">Bitmap height</label><select id="bitmapHeight"><option value="360">360 px (full layout)</option><option value="240">240 px (compact)</option><option value="160">160 px (minimal)</option></select><label for="bleChunk">BLE chunk size</label><select id="bleChunk"><option value="20">20 bytes (safe default)</option><option value="40">40 bytes (experimental)</option><option value="100">100 bytes (tested)</option><option value="150">150 bytes (experimental)</option><option value="200">200 bytes (benchmark)</option><option value="220">220 bytes (experimental)</option><option value="237">237 bytes (ATT MTU 240 theoretical limit)</option></select><output id="graphicEstimate" aria-live="polite"></output><p class="muted">MTU 240 bytes diukur melalui nRF Connect (payload ATT Write maksimum teoritikal 237 bytes). Sambungan Web Bluetooth mungkin berbeza; saiz melebihi 100 bytes belum disahkan. Tetapan disimpan pada browser ini sahaja. Jika cetakan terputus, kembali ke 100 bytes / 0ms atau 20 bytes / 50 ms.</p></fieldset><div class="graphic-actions"><button id="previewGraphic" class="secondary">Refresh preview</button><button id="printGraphic" disabled>Print graphic test</button><button id="benchmark200" disabled>Benchmark 200 bytes · 0ms</button></div><p class="muted">QR mengandungi https://apogee.github.io/rpp02n-ble-pwa/ . Anggaran penghantaran grafik 384×360 piksel mengambil masa lebih lama daripada teks kerana BLE chunk 20 byte.</p><p class="muted">ESC @ (initialize), teks dan tiga newline. Chunk 20 byte, jeda 50 ms. Tidak termasuk cut atau cash drawer.</p></section>
 <section class="panel"><h2>Log</h2><div id="log" aria-live="polite"></div><button id="clear" class="secondary">Clear log</button></section>
 <p class="muted">Perlu HTTPS atau localhost. Klik Connect untuk membuka pemilih peranti. Jika nRF Connect masih tersambung, disconnect dahulu. BLE write berjaya tidak semestinya membuktikan kertas telah dicetak.</p>
 </div>
-<section id="tab-diagnostics" class="tab-page" hidden><h1>🩺 Printer Diagnostics</h1><p class="muted">Satu sambungan BLE untuk printing dan monitoring. FF01 / FF03 notification kekal aktif ketika bertukar tab. Tiada arahan vendor-specific dihantar.</p><section class="panel"><h2>Status</h2><p>Battery: <strong id="diagBattery">Unknown</strong> · Paper: <strong>Unknown</strong></p><button id="diagRefresh">Refresh diagnostics</button><pre id="diagServices" class="shared-pre">Connect untuk inspect.</pre></section><section class="panel"><h2>Notification Monitor</h2><button id="monitorSubscribe">Subscribe FF01 + FF03</button><button id="monitorUnsubscribe" class="secondary">Unsubscribe</button><span id="monitorStatus" class="muted">Not subscribed</span><pre id="monitorOutput" class="shared-pre">Belum ada notification.</pre><button id="monitorClear" class="secondary">Clear notifications</button></section><section class="panel"><h2>ESC/POS Status Probe</h2><p class="muted">Experimental: send one DLE EOT query at a time via FF02. Responses, if supported, may arrive on FF01 or FF03. Keep notifications subscribed and compare normal, cover-open and paper-out conditions. These commands may be unsupported by this printer.</p><div id="probeButtons"><button type="button" data-probe="1">DLE EOT 1 · Printer</button><button type="button" data-probe="2">DLE EOT 2 · Offline</button><button type="button" data-probe="3">DLE EOT 3 · Error</button><button type="button" data-probe="4">DLE EOT 4 · Paper</button></div><p class="muted">No automatic retries or polling. Do not send while printing. Record physical paper/cover state separately when comparing exports.</p><pre id="probeOutput" class="shared-pre">No status probes yet.</pre></section><section class="panel"><h2>Event history</h2><pre id="eventOutput" class="shared-pre">Belum ada event.</pre><button id="diagExport">Export JSON</button></section></section>
+<section id="tab-diagnostics" class="tab-page" hidden><h1>🩺 Printer Diagnostics</h1><p class="muted">Satu sambungan BLE untuk printing dan monitoring. FF01 / FF03 notification kekal aktif ketika bertukar tab. Tiada arahan vendor-specific dihantar.</p><section class="panel"><h2>Status</h2><p>Battery: <strong id="diagBattery">Unknown</strong> · Readiness: <strong id="diagReadiness">UNKNOWN</strong></p><button id="diagRefresh">Refresh diagnostics</button><pre id="diagServices" class="shared-pre">Connect untuk inspect.</pre></section><section class="panel"><h2>Notification Monitor</h2><button id="monitorSubscribe">Subscribe FF01 + FF03</button><button id="monitorUnsubscribe" class="secondary">Unsubscribe</button><span id="monitorStatus" class="muted">Not subscribed</span><pre id="monitorOutput" class="shared-pre">Belum ada notification.</pre><button id="monitorClear" class="secondary">Clear notifications</button></section><section class="panel"><h2>ESC/POS Status Probe</h2><p class="muted">Experimental: send one DLE EOT query at a time via FF02. Responses, if supported, may arrive on FF01 or FF03. Keep notifications subscribed and compare normal, cover-open and paper-out conditions. These commands may be unsupported by this printer.</p><div id="probeButtons"><button type="button" data-probe="1">DLE EOT 1 · Printer</button><button type="button" data-probe="2">DLE EOT 2 · Offline</button><button type="button" data-probe="3">DLE EOT 3 · Error</button><button type="button" data-probe="4">DLE EOT 4 · Paper</button></div><p class="muted">No automatic retries or polling. Do not send while printing. Record physical paper/cover state separately when comparing exports.</p><pre id="probeOutput" class="shared-pre">No status probes yet.</pre></section><section class="panel"><h2>Event history</h2><pre id="eventOutput" class="shared-pre">Belum ada event.</pre><button id="diagExport">Export JSON</button></section></section>
 <section id="tab-gatt" class="tab-page" hidden><h1>🔎 GATT Explorer</h1><p class="muted">Perkhidmatan yang dibenarkan oleh browser. READ hanya apabila characteristic menyokong read. Subscribe pada FF01/FF03 melalui Diagnostics.</p><section class="panel"><button id="gattRefresh">Refresh GATT</button><div id="gattResults">Belum diperiksa.</div></section><section class="panel"><button id="gattExport">Export JSON</button></section></section>
 <section id="tab-identity" class="tab-page" hidden><h1>🪪 Identity Inspector</h1><p class="muted">Peranti yang sama dengan tab Print. Bacaan standard 0x1800 / 0x180A jika tersedia. Tiada MAC address Web Bluetooth.</p><section class="panel"><button id="identityRefresh">Inspect identity</button><pre id="identityResults" class="shared-pre">Belum diperiksa.</pre><button id="identityExport">Export JSON</button></section></section>
 </main><script>
@@ -22,15 +22,24 @@
 const SERVICE=0xFF00, CHARACTERISTIC=0xFF02;
 const $=id=>document.getElementById(id);
 let busy=false;
+const statusManager={state:'UNKNOWN',raw:null,checkedAt:null,pending:null,timeoutMs:1500};
 const events=[],notifications=[],manager={device:null,server:null,writer:null,subscriptions:new Map(),generation:0,monitorBusy:false,services:[],identity:[]};
 function eventLog(type,details={}){const entry={timestamp:new Date().toISOString(),type,...details};events.push(entry);$('eventOutput').textContent+=entry.timestamp+' '+type+' '+JSON.stringify(details)+'\n';log(type+' '+JSON.stringify(details));}
 function log(message){$('log').textContent+='['+new Date().toLocaleTimeString()+'] '+message+'\n';}
 function connected(){return !!(manager.device?.gatt?.connected&&manager.server&&manager.writer);}
+function renderPrinterStatus(){
+ const p=statusManager,detail=p.checkedAt?'Last check '+new Date(p.checkedAt).toLocaleTimeString()+(p.raw===null?'':', DLE EOT 4: 0x'+p.raw.toString(16).padStart(2,'0').toUpperCase()):'No successful status check';
+ $('printerReadiness').textContent=p.state;$('diagReadiness').textContent=p.state;
+ $('printerStatusDetail').textContent=detail+(p.state==='NOT_READY'?' — Check paper or printer cover.':'');
+}
+function setPrinterStatus(state,raw=null){statusManager.state=state;statusManager.raw=raw;statusManager.checkedAt=new Date().toISOString();renderPrinterStatus();eventLog('PRINTER_STATUS',{state,rawHex:raw===null?null:hexBytes(Uint8Array.of(raw))});}
+function rejectStatusPending(message){const p=statusManager.pending;if(p){statusManager.pending=null;clearTimeout(p.timer);p.reject(Error(message));}}
 function refresh(){
  const ok=connected();$('status').textContent=ok?'Connected':'Belum disambung';
  for(const id of ['connect','sharedConnect'])$(id).disabled=busy||ok;
  for(const id of ['disconnect','sharedDisconnect'])$(id).disabled=busy||!ok;
  for(const id of ['test','print','printGraphic','benchmark200'])$(id).disabled=busy||!ok;
+ $('checkPrinterStatus').disabled=busy||manager.monitorBusy||!ok;
  $('previewGraphic').disabled=busy;
  for(const id of ['diagRefresh','gattRefresh','identityRefresh'])$(id).disabled=busy||!ok;
  for(const b of document.querySelectorAll('[data-probe]'))b.disabled=busy||manager.monitorBusy||!ok;
@@ -45,7 +54,7 @@ function clearSubscriptions(){
  for(const {characteristic,handler} of manager.subscriptions.values())characteristic.removeEventListener('characteristicvaluechanged',handler);
  manager.subscriptions.clear();manager.monitorBusy=false;
 }
-function onDisconnected(){clearSubscriptions();manager.server=null;manager.writer=null;eventLog('GATT_DISCONNECTED');refresh();}
+function onDisconnected(){rejectStatusPending('BLE disconnected');setPrinterStatus('UNKNOWN');clearSubscriptions();manager.server=null;manager.writer=null;eventLog('GATT_DISCONNECTED');refresh();}
 async function connect(){
  if(connected()||busy)return;busy=true;refresh();
  try{
@@ -58,13 +67,14 @@ async function connect(){
   manager.writer=await service.getCharacteristic(0xFF02);
   if(!manager.writer.properties.write&&!manager.writer.properties.writeWithoutResponse)throw Error('FF02 not writable');
   $('deviceInfo').textContent='Printer: '+(device.name||'Unknown');
-  eventLog('GATT_CONNECTED',{name:device.name,writeWithoutResponse:manager.writer.properties.writeWithoutResponse});
+  setPrinterStatus('UNKNOWN');eventLog('GATT_CONNECTED',{name:device.name,writeWithoutResponse:manager.writer.properties.writeWithoutResponse});
  }catch(e){eventLog('CONNECT_ERROR',{error:e.message});if(manager.device?.gatt?.connected)manager.device.gatt.disconnect();manager.server=null;manager.writer=null;}
  finally{busy=false;refresh();}
 }
 function disconnect(){manager.device?.gatt?.disconnect();refresh();}
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function send(bytes, options={}){if(!connected())throw new Error('Printer tidak disambung');busy=true;refresh();try{
+ if($('prePrintCheck').checked){const status=await checkReadiness({withinPrint:true});if(status!=='READY'){eventLog('PRINT_BLOCKED_STATUS',{state:status});log('Print cancelled: '+status);return;}}
  const chunkSize=options.chunkSize??20,delayMs=options.delayMs??50;
  if(![20,40,100,150,200,220,237].includes(chunkSize)||![0,5,10,20,50].includes(delayMs))throw Error('Invalid BLE settings');
  eventLog('PRINT_START',{bytes:bytes.length,chunkSize,delayMs});
@@ -179,6 +189,29 @@ function downloadJSON(prefix,data){
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=prefix+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+async function checkReadiness({withinPrint=false}={}){
+ if(!connected()||manager.monitorBusy||statusManager.pending||(!withinPrint&&busy))return 'UNKNOWN';
+ if(!withinPrint){busy=true;refresh();}
+ const command=Uint8Array.of(0x10,0x04,0x04);
+ try{
+  if(!manager.subscriptions.has('0xFF01'))await subscribeMonitor();
+  if(!manager.subscriptions.has('0xFF01'))throw Error('FF01 notifications unavailable');
+  const generation=manager.generation;
+  const response=new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>{statusManager.pending=null;reject(Error('FF01 status timeout'));},statusManager.timeoutMs);
+   statusManager.pending={resolve,reject,timer,generation};
+  });
+  eventLog('PRINTER_STATUS_CHECK_TX',{hex:hexBytes(command),timeoutMs:statusManager.timeoutMs});
+  try{
+   if(manager.writer.properties.writeWithoutResponse&&manager.writer.writeValueWithoutResponse)await manager.writer.writeValueWithoutResponse(command);
+   else await manager.writer.writeValueWithResponse(command);
+  }catch(e){rejectStatusPending(e.message);response.catch(()=>{});throw e;}
+  const value=await response;
+  const state=(value&0x60)?'NOT_READY':'READY';setPrinterStatus(state,value);return state;
+ }catch(e){rejectStatusPending(e.message);setPrinterStatus('UNKNOWN');eventLog('PRINTER_STATUS_CHECK_ERROR',{error:e.message});return 'UNKNOWN';}
+ finally{if(!withinPrint){busy=false;refresh();}}
+}
+$('checkPrinterStatus').addEventListener('click',()=>checkReadiness());
 async function statusProbe(n){
  if(!connected()||busy||manager.monitorBusy||![1,2,3,4].includes(n))return;
  busy=true;refresh();
@@ -212,6 +245,7 @@ async function subscribeMonitor(){
      const bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength);
      const record={timestamp:new Date().toISOString(),characteristic:key,byteLength:bytes.length,hex:hexBytes(bytes),base64:b64Bytes(bytes)};
      notifications.push(record);
+     if(key==='0xFF01'&&bytes.length===1&&statusManager.pending&&statusManager.pending.generation===manager.generation){const pending=statusManager.pending;statusManager.pending=null;clearTimeout(pending.timer);pending.resolve(bytes[0]);}
      if($('probeOutput'))$('probeOutput').textContent+=record.timestamp+' RX '+key+' '+record.hex+'\\n';
      $('monitorOutput').textContent+=record.timestamp+' '+key+' ('+record.byteLength+' bytes)\nHEX: '+record.hex+'\nBase64: '+record.base64+'\n\n';
      $('monitorOutput').scrollTop=$('monitorOutput').scrollHeight;
@@ -233,6 +267,7 @@ async function subscribeMonitor(){
  finally{manager.monitorBusy=false;refresh();}
 }
 async function unsubscribeMonitor(){
+ rejectStatusPending('Notifications unsubscribed');setPrinterStatus('UNKNOWN');
  if(manager.monitorBusy||!manager.subscriptions.size)return;
  manager.monitorBusy=true;refresh();
  const list=[...manager.subscriptions.entries()];manager.subscriptions.clear();
@@ -324,9 +359,9 @@ $('monitorClear').addEventListener('click',()=>{notifications.length=0;$('monito
 $('diagRefresh').addEventListener('click',inspectDiagnostics);
 $('gattRefresh').addEventListener('click',inspectGATT);
 $('identityRefresh').addEventListener('click',inspectIdentity);
-$('diagExport').addEventListener('click',()=>downloadJSON('rpp02n-diagnostics',{device:manager.device?.name,connected:connected(),battery:$('diagBattery').textContent,services:manager.services,notifications,events}));
+$('diagExport').addEventListener('click',()=>downloadJSON('rpp02n-diagnostics',{device:manager.device?.name,connected:connected(),battery:$('diagBattery').textContent,printerStatus:{state:statusManager.state,raw:statusManager.raw,checkedAt:statusManager.checkedAt},services:manager.services,notifications,events}));
 $('gattExport').addEventListener('click',()=>downloadJSON('rpp02n-gatt',{services:manager.services,events}));
 $('identityExport').addEventListener('click',()=>downloadJSON('rpp02n-identity',{identity:manager.identity,events}));
 
-log('Ready. Connect ke RPP02N.');refresh();
+log('Ready. Connect ke RPP02N.');renderPrinterStatus();refresh();
 </script></body></html>
