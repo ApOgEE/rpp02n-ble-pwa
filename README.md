@@ -1,6 +1,6 @@
 # RPP02N Web Bluetooth PWA
 
-A lightweight Progressive Web App (PWA) for **printing ESC/POS receipts directly to an RPP02N Bluetooth Low Energy (BLE) thermal printer**, exploring GATT services, and inspecting standard BLE device identity information.
+A lightweight single-page Progressive Web App (PWA) for **printing ESC/POS receipts directly to an RPP02N Bluetooth Low Energy (BLE) thermal printer**, exploring GATT services, and inspecting standard BLE device identity information.
 
 **[Launch the PWA](https://apogee.github.io/rpp02n-ble-pwa/)** · **[Repository](https://github.com/ApOgEE/rpp02n-ble-pwa)**
 
@@ -10,9 +10,9 @@ A lightweight Progressive Web App (PWA) for **printing ESC/POS receipts directly
 
 | Page | Function |
 | --- | --- |
-| [Printer](index.html) | Connect to an RPP02N, print a test message, or send a simple ESC/POS text receipt. |
-| [GATT Explorer](gatt.html) | List accessible GATT services and characteristics, read values, subscribe to notifications/indications, and export JSON logs. |
-| [Device Identity Inspector](identity.html) | Read standard identity characteristics such as device name, serial number, system ID, model, firmware and manufacturer **when available**, and export JSON. |\n| [Printer Diagnostics](diagnostics.html) | Read standard BLE Battery Level when available, list permitted GATT service/characteristic metadata, monitor FF01/FF03 notifications and export JSON without vendor writes. |
+| [Printer](index.html#print) | Connect to an RPP02N, print a test message, or send a simple ESC/POS text receipt. |
+| [GATT Explorer](index.html#gatt) | List accessible GATT services and characteristics, read values, subscribe to notifications/indications, and export JSON logs. |
+| [Device Identity Inspector](index.html#identity) | Read standard identity characteristics such as device name, serial number, system ID, model, firmware and manufacturer **when available**, and export JSON. |\n| [Printer Diagnostics](index.html#diagnostics) | Read standard BLE Battery Level when available, list permitted GATT service/characteristic metadata, monitor FF01/FF03 notifications and export JSON without vendor writes. |
 
 Built with plain HTML, CSS, and JavaScript. No build tools, backend, or native Android bridge are required.
 
@@ -145,3 +145,17 @@ The page also lists **permitted** GATT service UUIDs, characteristic UUIDs and p
 On the [Printer Diagnostics](diagnostics.html) page, select **Subscribe FF01 + FF03** after connecting. The monitor uses the tested RPP02N service `0xFF00`, attempts GATT `startNotifications()` on `0xFF01` and `0xFF03` independently, and reports individual failures without stopping the other subscription. Each received packet is displayed and exported with an ISO-8601 timestamp, characteristic UUID label, byte count, uppercase HEX and Base64. Use **Unsubscribe** to call `stopNotifications()` and remove event handlers, or **Disconnect** to clear the session. **Clear notifications** clears captured packets but does not change the active subscriptions. **Export JSON** includes the notification records alongside the existing diagnostics and logs.
 
 The monitor sends **no vendor-specific commands, ESC/POS status requests or characteristic value writes**. GATT notification subscription itself configures the client's CCCD, so it is not entirely passive. Notifications might not arrive until a vendor-defined trigger occurs; absence of packets does not prove the device lacks status reporting. Notification contents are **raw/undecoded** and must not be interpreted as battery percentage or paper status without a verified protocol. The monitor has not yet been validated on the physical printer.
+
+## Single-page shared BLE connection (2026-11-03)
+
+The PWA now has **Print**, **Diagnostics**, **GATT Explorer** and **Identity Inspector** tabs inside `index.html`. The BLE connection, write characteristic `FF02`, and `FF01`/`FF03` notification subscriptions live in the same JavaScript document; switching tabs does not reload the page or disconnect GATT. Previous standalone URLs redirect to their corresponding `index.html#...` tabs. A full page reload, browser suspension, Bluetooth disconnect, or closing the tab can still end the BLE connection.
+
+1. **Connect** once in the shared connection header (select RPP02N).
+2. Open **Diagnostics** and select **Subscribe FF01 + FF03**.
+3. Switch to **Print**, select **237-byte chunks / 0ms** in Graphic BLE settings, and print a graphic receipt. The separate **Benchmark 200 bytes · 0ms** button still uses 200 bytes; for 237 bytes use **Print graphic test**.
+4. Return to **Diagnostics** to see notifications captured during the print, with ISO timestamps, HEX and Base64. **Export JSON** includes the raw notification history and event timeline.
+5. Use **Unsubscribe** or **Disconnect** to end monitoring.
+
+The event timeline records `PRINT_START`, `PRINT_TRANSFER_COMPLETE` and `PRINT_ERROR` with ISO timestamps and transfer details. `PRINT_TRANSFER_COMPLETE` means the browser finished BLE writes, **not** that the physical printer completed printing. Notification payloads are not decoded into battery or paper status. The standard Battery Service is still absent on the tested unit.
+
+**Scope:** GATT Explorer retains permitted-service discovery and safe READ operations; standard identity characteristics are inspected using the same printer connection. The previous generic GATT notification-subscription UI is replaced by the dedicated FF01/FF03 monitor; the previous identity device picker for non-printer/JBD devices is not included in this printer-focused single-connection workflow. No vendor-specific write commands were added. Device-side validation and regression testing are required before merging.
