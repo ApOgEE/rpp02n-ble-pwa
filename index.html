@@ -5,12 +5,12 @@
 <meta name="theme-color" content="#0f766e"><link rel="manifest" href="manifest.webmanifest">
 <title>RPP02N BLE Printer Test</title>
 <style>
-:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f3f6f7}*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:650px;margin:auto}h1{font-size:1.5rem}p{line-height:1.5}.panel{background:white;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000a}button{border:0;border-radius:9px;padding:12px 15px;background:#0f766e;color:white;font-weight:650;margin:4px 5px 4px 0;cursor:pointer}button.secondary{background:#475569}button:disabled{opacity:.45;cursor:not-allowed}textarea{width:100%;min-height:170px;font:15px monospace;padding:12px;border:1px solid #cbd5e1;border-radius:8px}#log{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;min-height:100px;font:12px/1.6 monospace}.muted{color:#475569;font-size:.9rem}#status{font-weight:700}label{display:block;margin:10px 0 5px}nav a{display:inline-block;padding:9px 12px;color:#0f766e;font-weight:700;text-decoration:none}nav a[aria-current]{background:#d1fae5;border-radius:8px}
+:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f3f6f7}*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:650px;margin:auto}h1{font-size:1.5rem}p{line-height:1.5}.panel{background:white;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000a}button{border:0;border-radius:9px;padding:12px 15px;background:#0f766e;color:white;font-weight:650;margin:4px 5px 4px 0;cursor:pointer}button.secondary{background:#475569}button:disabled{opacity:.45;cursor:not-allowed}textarea{width:100%;min-height:170px;font:15px monospace;padding:12px;border:1px solid #cbd5e1;border-radius:8px}#log{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;min-height:100px;font:12px/1.6 monospace}.muted{color:#475569;font-size:.9rem}#status{font-weight:700}label{display:block;margin:10px 0 5px}nav a{display:inline-block;padding:9px 12px;color:#0f766e;font-weight:700;text-decoration:none}nav a[aria-current]{background:#d1fae5;border-radius:8px}.graphic-preview{display:block;width:100%;max-width:384px;height:auto;border:1px solid #cbd5e1;border-radius:8px;margin:12px auto;image-rendering:pixelated;background:#fff}.graphic-actions{display:flex;flex-wrap:wrap;gap:6px}.graphic-actions button{flex:1 1 150px}
 </style>
 </head>
 <body><main><nav class="panel" aria-label="Navigasi"><a href="./index.html" aria-current="page">🖨️ Printer</a> <a href="./gatt.html">🔎 GATT Explorer</a> <a href="./identity.html">🪪 Identity Inspector</a></nav><h1>🖨️ RPP02N — Direct BLE Print</h1><p class="muted">Chrome Android · Web Bluetooth · ESC/POS · Service FF00 / Characteristic FF02</p>
 <section class="panel"><div>Status: <span id="status">Belum disambung</span></div><p class="muted" id="deviceInfo">Printer: RPP02N</p><button id="connect">Connect</button><button id="disconnect" class="secondary" disabled>Disconnect</button></section>
-<section class="panel"><h2>Test print</h2><button id="test" disabled>Print TEST PWA</button><label for="receipt">Teks resit (ASCII untuk ujian pertama)</label><textarea id="receipt">KEDAI SAYA\n------------------------------\nKopi O              RM 2.50\nRoti Canai          RM 1.50\n------------------------------\nTOTAL               RM 4.00\nTerima kasih!</textarea><button id="print" disabled>Print resit</button><p class="muted">ESC @ (initialize), teks dan tiga newline. Chunk 20 byte, jeda 50 ms. Tidak termasuk cut atau cash drawer.</p></section>
+<section class="panel"><h2>Test print</h2><button id="test" disabled>Print TEST PWA</button><label for="receipt">Teks resit (ASCII untuk ujian pertama)</label><textarea id="receipt">KEDAI SAYA\n------------------------------\nKopi O              RM 2.50\nRoti Canai          RM 1.50\n------------------------------\nTOTAL               RM 4.00\nTerima kasih!</textarea><button id="print" disabled>Print resit</button><h3>Graphic print test</h3><p class="muted">Preview bitmap monokrom 384-dot dengan QR code pautan PWA ini, ikon ringkas, teks dan corak ujian. Grafik dihantar sebagai ESC/POS raster image (GS v 0); sokongan firmware printer perlu diuji.</p><canvas id="graphicPreview" class="graphic-preview" width="384" height="360" role="img" aria-label="Preview resit ujian grafik"></canvas><div class="graphic-actions"><button id="previewGraphic" class="secondary">Refresh preview</button><button id="printGraphic" disabled>Print graphic test</button></div><p class="muted">QR mengandungi https://apogee.github.io/rpp02n-ble-pwa/ . Anggaran penghantaran grafik 384×360 piksel mengambil masa lebih lama daripada teks kerana BLE chunk 20 byte.</p><p class="muted">ESC @ (initialize), teks dan tiga newline. Chunk 20 byte, jeda 50 ms. Tidak termasuk cut atau cash drawer.</p></section>
 <section class="panel"><h2>Log</h2><div id="log" aria-live="polite"></div><button id="clear" class="secondary">Clear log</button></section>
 <p class="muted">Perlu HTTPS atau localhost. Klik Connect untuk membuka pemilih peranti. Jika nRF Connect masih tersambung, disconnect dahulu. BLE write berjaya tidak semestinya membuktikan kertas telah dicetak.</p>
 </main><script>
@@ -20,7 +20,7 @@ const $=id=>document.getElementById(id);
 let device=null, writer=null, busy=false;
 function log(message){const time=new Date().toLocaleTimeString();$('log').textContent+=`[${time}] ${message}\n`;}
 function connected(){return !!(device?.gatt?.connected && writer);}
-function refresh(){const ok=connected();$('status').textContent=ok?'Connected':'Belum disambung';$('connect').disabled=busy||ok;$('disconnect').disabled=busy||!device;$('test').disabled=busy||!ok;$('print').disabled=busy||!ok;}
+function refresh(){const ok=connected();$('status').textContent=ok?'Connected':'Belum disambung';$('connect').disabled=busy||ok;$('disconnect').disabled=busy||!device;$('test').disabled=busy||!ok;$('print').disabled=busy||!ok;$('printGraphic').disabled=busy||!ok;$('previewGraphic').disabled=busy;}
 function onDisconnected(){writer=null;log('GATT disconnected');refresh();}
 async function connect(){busy=true;refresh();try{
  if(!navigator.bluetooth)throw new Error('Web Bluetooth tidak disokong. Gunakan Chrome Android melalui HTTPS.');
@@ -50,6 +50,75 @@ $('connect').addEventListener('click',connect);$('disconnect').addEventListener(
 $('test').addEventListener('click',()=>send(payload('TEST PWA')));
 $('print').addEventListener('click',()=>send(payload($('receipt').value)));
 $('clear').addEventListener('click',()=>{$('log').textContent='';});
+
+const QR_ROWS=`11111110001001000010001111111
+10000010111110001010001000001
+10111010110110011001101011101
+10111010111001011101101011101
+10111010001100100111001011101
+10000010010011101100001000001
+11111110101010101010101111111
+00000000101110101001000000000
+10000010100101110110011001110
+10001101110110110111000110110
+00101011010010010100100100000
+00111001100100101000110111000
+01010111111000101001001100001
+00001101101101011001101110011
+01100110100101110110000101100
+01110000100000011010111100101
+00000111111000010101010001100
+11101100110001011001101110111
+11001111110010010111100111001
+10111100110001001010101010000
+10111010010100100100111110111
+00000000111100111001100011000
+11111110010010010011101011100
+10000010011110111011100010000
+10111010001001101011111111010
+10111010000110111001010101101
+10111010011010110010111111110
+10000010011010011010011111101
+11111110101001011111001010100`.split('\n');
+const QR_URL='https://apogee.github.io/rpp02n-ble-pwa/';
+function drawGraphic(){
+ const canvas=$('graphicPreview'),ctx=canvas.getContext('2d',{willReadFrequently:true}),w=canvas.width;
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,w,canvas.height);ctx.fillStyle='#000';ctx.textAlign='center';
+ ctx.font='bold 30px monospace';ctx.fillText('RPP02N',w/2,40);
+ ctx.font='15px monospace';ctx.fillText('GRAPHIC PRINT TEST',w/2,64);
+ ctx.fillRect(16,76,w-32,2);
+ const moduleSize=5,qrSize=29*moduleSize,qx=Math.floor((w-qrSize)/2),qy=91;
+ // QR matrix is pre-generated for QR_URL, including four white modules of quiet zone.
+ for(let y=0;y<29;y++)for(let x=0;x<29;x++)if(QR_ROWS[y][x]==='1')ctx.fillRect(qx+x*moduleSize,qy+y*moduleSize,moduleSize,moduleSize);
+ ctx.font='12px monospace';ctx.fillText('SCAN FOR PWA',w/2,251);
+ ctx.fillRect(16,263,w-32,2);
+ // Small monochrome icons: battery, lightning and Bluetooth.
+ ctx.lineWidth=3;ctx.strokeStyle='#000';ctx.strokeRect(44,285,56,27);ctx.fillRect(100,293,6,11);
+ for(let i=0;i<3;i++)ctx.fillRect(49+i*15,290,10,17);
+ ctx.beginPath();ctx.moveTo(172,281);ctx.lineTo(156,304);ctx.lineTo(170,304);ctx.lineTo(162,331);ctx.lineTo(186,298);ctx.lineTo(173,298);ctx.closePath();ctx.fill();
+ ctx.beginPath();ctx.moveTo(263,282);ctx.lineTo(263,333);ctx.moveTo(263,282);ctx.lineTo(280,296);ctx.lineTo(247,321);ctx.moveTo(263,333);ctx.lineTo(280,319);ctx.lineTo(247,295);ctx.stroke();
+ ctx.font='11px monospace';ctx.fillText('BATTERY',74,347);ctx.fillText('POWER',170,347);ctx.fillText('BLE',263,347);
+}
+function rasterPayload(canvas){
+ const {width,height}=canvas;if(width%8)throw Error('Bitmap width must be divisible by 8');
+ const rgba=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,width,height).data;
+ const rowBytes=width/8,bitmap=new Uint8Array(rowBytes*height);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const offset=(y*width+x)*4;
+  // White background and threshold; ESC/POS expects 1=black, MSB first.
+  const luminance=(rgba[offset]*299+rgba[offset+1]*587+rgba[offset+2]*114)/1000;
+  if(rgba[offset+3]>127&&luminance<160)bitmap[y*rowBytes+(x>>3)]|=0x80>>(x&7);
+ }
+ const header=Uint8Array.from([0x1B,0x40,0x1D,0x76,0x30,0x00,rowBytes&255,rowBytes>>8,height&255,height>>8]);
+ const footer=Uint8Array.from([0x0A,0x0A,0x0A]);
+ const output=new Uint8Array(header.length+bitmap.length+footer.length);
+ output.set(header);output.set(bitmap,header.length);output.set(footer,header.length+bitmap.length);
+ return output;
+}
+$('previewGraphic').addEventListener('click',drawGraphic);
+$('printGraphic').addEventListener('click',()=>{drawGraphic();send(rasterPayload($('graphicPreview')));});
+drawGraphic();
+
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(e=>log('SW: '+e.message)));}
 log('Ready. Connect ke RPP02N.');refresh();
 </script></body></html>
