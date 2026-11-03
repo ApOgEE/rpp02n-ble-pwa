@@ -18,3 +18,9 @@ Copy the **contents** of this directory to the root of your existing `rpp02n-ble
 ## Limitations
 
 Web Bluetooth does not expose BLE MAC addresses. Browser device IDs are browser-origin scoped. Disconnect/reconnect between pages; a page navigation does not preserve its active GATT connection. BLE requires HTTPS or localhost and browser support (Brave may need its Web Bluetooth flag).
+
+## Device Identity Inspector
+
+Open `identity.html` from the navigation. This read-only tool requests access to standard Generic Access (`0x1800`) and optional Device Information (`0x180A`) GATT services. It attempts to read Device Name, Appearance, System ID, Model Number, Serial Number, firmware/hardware/software revisions, Manufacturer Name, regulatory data and PnP ID when supported, and exports a JSON report.
+
+It never sends GATT writes or BMS control commands. Web Bluetooth browser IDs are not Bluetooth MAC addresses; a characteristic may be absent or not readable. In particular, no unique identifier is guaranteed for RPP02N or JBD BMS. Select the JBD filter only when testing near the BMS, and do not alter an operating off-grid power system.
