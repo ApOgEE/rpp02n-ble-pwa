@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0f766e"><link rel="manifest" href="./manifest.webmanifest"><title>BMS BLE Research</title>
+<style>
+:root{font-family:system-ui,sans-serif;background:#f3f6f7;color:#17212b}*{box-sizing:border-box}body{margin:0;padding:16px}main{max-width:760px;margin:auto}.panel{background:white;border-radius:12px;padding:16px;margin:14px 0;box-shadow:0 2px 10px #0001}button{background:#0f766e;color:white;border:0;border-radius:8px;padding:10px 13px;margin:4px;cursor:pointer}button:disabled{opacity:.5}a{color:#0f766e}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:12px;border-radius:8px;max-height:340px;overflow:auto;font-size:12px}.muted{color:#475569}.device,.char{border:1px solid #cbd5e1;padding:12px;border-radius:8px;margin:8px 0;overflow-wrap:anywhere}input[type=text]{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px}label{display:block;margin:10px 0}
+</style></head><body><main><p><a href="./index.html">← Printer PWA</a></p><h1>🔋 BMS BLE Research</h1><p class="muted">Independent experimental workspace for SP21S001HL21S200A BMS. No printer BLE manager or ESC/POS commands are used. HTTPS and Chrome Android Web Bluetooth required.</p>
+<section class="panel"><h2>Discovery</h2><p>Chrome's chooser may show fewer devices than nRF Connect. Web Bluetooth cannot reveal MAC addresses or perform unrestricted background scans. Pick one device per click; repeat for up to six BMS.</p><button id="pickNamed">Select SP21S001…</button><button id="pickAll">Select any BLE device</button><p id="summary" aria-live="polite">0 selected devices</p><div id="devices"></div></section>
+<section class="panel"><h2>GATT investigation</h2><p class="muted">Connect a selected BMS and discover browser-permitted services/characteristics. Read and subscribe are offered only when advertised. Writes are deliberately disabled for safety.</p><label for="serviceUUID">Additional GATT service UUID (optional, e.g. 0xFFF0 or full 128-bit UUID)</label><input id="serviceUUID" type="text" placeholder="Known service UUID"><button id="addService">Add UUID for next selection</button><p class="muted">Web Bluetooth requires services to be declared during device selection. Add a UUID, then select the BMS again. Unknown vendor services may not be accessible without their UUID.</p><div id="gatt"></div></section>
+<section class="panel"><h2>Research log</h2><button id="export">Export JSON</button><button id="clearLog">Clear log</button><pre id="log">Ready.</pre></section>
+</main><script>
+'use strict';
+const $=id=>document.getElementById(id),devices=new Map(),events=[],knownServices=new Set([0x1800,0x1801,0x180A,0x180F]),subscriptions=new Map();
+const now=()=>new Date().toISOString(),hex=b=>Array.from(b,v=>v.toString(16).padStart(2,'0')).join(' ').toUpperCase();
+function record(type,details={}){const e={timestamp:now(),type,...details};events.push(e);$('log').textContent+='\n'+e.timestamp+' '+type+' '+JSON.stringify(details);$('log').scrollTop=$('log').scrollHeight;}
+function bytesOf(v){return new Uint8Array(v.buffer,v.byteOffset,v.byteLength);}
+function addButton(parent,title,fn){const b=document.createElement('button');b.textContent=title;b.addEventListener('click',fn);parent.append(b);return b;}
+function renderDevices(){
+ $('summary').textContent=devices.size+' selected device(s) — select devices one by one';
+ const root=$('devices');root.replaceChildren();
+ for(const [id,entry] of devices){
+  const card=document.createElement('div');card.className='device';
+  const name=document.createElement('strong');name.textContent=entry.device.name||'Unnamed BLE device';card.append(name);
+  const info=document.createElement('p');info.className='muted';info.textContent='Browser ID: '+id+' · '+(entry.device.gatt?.connected?'Connected':'Disconnected')+' · Label: '+entry.label;card.append(info);
+  addButton(card,'Connect / inspect',()=>inspect(entry));
+  addButton(card,'Disconnect',()=>{entry.device.gatt?.disconnect();record('DISCONNECT_REQUEST',{id});renderDevices();});
+  addButton(card,'Set label',()=>{const label=prompt('Local label for this BMS (e.g. BMS 1)',entry.label);if(label!==null){entry.label=label.slice(0,80);record('LABEL_UPDATED',{id,label:entry.label});renderDevices();}});
+  root.append(card);
+ }
+}
+async function choose(named){
+ if(!navigator.bluetooth){record('ERROR',{message:'Web Bluetooth unavailable'});return;}
+ try{
+  const optionalServices=[...knownServices];
+  const options=named?{filters:[{namePrefix:'SP21S001'}],optionalServices}:{acceptAllDevices:true,optionalServices};
+  record('PICKER_OPEN',{named,optionalServices});
+  const device=await navigator.bluetooth.requestDevice(options);
+  if(!devices.has(device.id)){
+   const entry={device,label:'BMS '+(devices.size+1)};
+   devices.set(device.id,entry);
+   device.addEventListener('gattserverdisconnected',()=>{record('DISCONNECTED',{id:device.id});cleanup(device.id);renderDevices();});
+  }
+  record('DEVICE_SELECTED',{id:device.id,name:device.name});
+  renderDevices();
+ }catch(e){record('PICKER_ERROR',{name:e.name,message:e.message});}
+}
+$('pickNamed').addEventListener('click',()=>choose(true));
+$('pickAll').addEventListener('click',()=>choose(false));
+$('addService').addEventListener('click',()=>{
+ const v=$('serviceUUID').value.trim();let uuid;
+ if(/^0x[0-9a-f]{4}$/i.test(v))uuid=parseInt(v,16);
+ else if(/^[0-9a-f]{4}$/i.test(v))uuid=parseInt(v,16);
+ else if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))uuid=v.toLowerCase();
+ else{record('INVALID_UUID',{value:v});return;}
+ knownServices.add(uuid);record('SERVICE_UUID_ADDED',{uuid});$('serviceUUID').value='';
+});
+function cleanup(id){for(const [key,item] of subscriptions)if(key.startsWith(id+'|')){item.ch.removeEventListener('characteristicvaluechanged',item.handler);subscriptions.delete(key);}}
+async function inspect(entry){
+ const device=entry.device,id=device.id;
+ const root=$('gatt');root.replaceChildren();const title=document.createElement('h3');title.textContent='GATT: '+entry.label;root.append(title);
+ try{
+  const server=device.gatt.connected?device.gatt:await device.gatt.connect();
+  record('CONNECTED',{id,name:device.name});
+  const services=await server.getPrimaryServices();
+  record('SERVICES_DISCOVERED',{id,uuids:services.map(s=>s.uuid)});
+  if(!services.length)record('NO_ACCESSIBLE_SERVICES',{id,hint:'Try adding vendor service UUID and reselecting device'});
+  for(const service of services){
+   const box=document.createElement('div');box.className='device';
+   const heading=document.createElement('strong');heading.textContent='Service '+service.uuid;box.append(heading);
+   root.append(box);
+   try{
+    const chars=await service.getCharacteristics();
+    for(const ch of chars){
+     const p=ch.properties,key=id+'|'+service.uuid+'|'+ch.uuid;
+     const line=document.createElement('div');line.className='char';
+     const description=document.createElement('div');description.textContent=ch.uuid+' · '+['read','notify','indicate','write','writeWithoutResponse'].filter(k=>p[k]).join(', ');line.append(description);
+     record('CHARACTERISTIC',{id,service:service.uuid,uuid:ch.uuid,properties:{read:p.read,notify:p.notify,indicate:p.indicate,write:p.write,writeWithoutResponse:p.writeWithoutResponse}});
+     if(p.read)addButton(line,'Read',async()=>{try{const data=bytesOf(await ch.readValue());record('READ',{id,service:service.uuid,uuid:ch.uuid,hex:hex(data)});}catch(e){record('READ_ERROR',{id,uuid:ch.uuid,error:e.message});}});
+     if(p.notify||p.indicate){
+      addButton(line,'Subscribe',async()=>{
+       if(subscriptions.has(key))return;
+       const handler=e=>{const data=bytesOf(e.target.value);record('NOTIFICATION',{id,service:service.uuid,uuid:ch.uuid,hex:hex(data)});};
+       try{ch.addEventListener('characteristicvaluechanged',handler);await ch.startNotifications();subscriptions.set(key,{ch,handler});record('SUBSCRIBED',{id,uuid:ch.uuid});}
+       catch(e){ch.removeEventListener('characteristicvaluechanged',handler);record('SUBSCRIBE_ERROR',{id,uuid:ch.uuid,error:e.message});}
+      });
+      addButton(line,'Unsubscribe',async()=>{
+       const item=subscriptions.get(key);if(!item)return;
+       subscriptions.delete(key);item.ch.removeEventListener('characteristicvaluechanged',item.handler);
+       try{await item.ch.stopNotifications();record('UNSUBSCRIBED',{id,uuid:ch.uuid});}catch(e){record('UNSUBSCRIBE_ERROR',{id,uuid:ch.uuid,error:e.message});}
+      });
+     }
+     box.append(line);
+    }
+   }catch(e){record('CHARACTERISTICS_ERROR',{id,service:service.uuid,error:e.message});}
+  }
+  renderDevices();
+ }catch(e){record('GATT_ERROR',{id,name:e.name,error:e.message});renderDevices();}
+}
+$('export').addEventListener('click',()=>{
+ const data={exportedAt:now(),deviceCount:devices.size,devices:[...devices].map(([id,e])=>({id,name:e.device.name,label:e.label,connected:!!e.device.gatt?.connected})),knownServices:[...knownServices],events};
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bms-ble-research-'+now().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+$('clearLog').addEventListener('click',()=>{events.length=0;$('log').textContent='Log cleared.';});
+renderDevices();
+</script></body></html>
