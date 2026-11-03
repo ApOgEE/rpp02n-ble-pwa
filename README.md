@@ -105,4 +105,12 @@ The Printer page includes a monochrome 384 × 360 pixel preview with a QR code l
 
 ### Adjustable graphic print settings
 
-Before printing, choose BLE delay (0/5/10/20/50 ms), bitmap height (160/240/360 px), and BLE chunk size (20/40/100 bytes) in **Graphic BLE settings**. Defaults are 50 ms, 360 px and 20 bytes. Changes are stored in browser localStorage. A transfer estimate is shown and actual transfer time and throughput are logged after sending. Values above 20 bytes are experimental and may fail due to negotiated BLE MTU limits. The bitmap preview scales uniformly to keep QR modules square; smaller heights can reduce QR readability. Text receipt printing retains the original 20-byte / 50-ms pacing.
+Before printing, choose BLE delay (0/5/10/20/50 ms), bitmap height (160/240/360 px), and BLE chunk size (20/40/100/150/200/220/237 bytes) in **Graphic BLE settings**. Defaults are 50 ms, 360 px and 20 bytes. Changes are stored in browser localStorage. A transfer estimate is shown and actual transfer time and throughput are logged after sending. Values above 20 bytes are experimental and may fail due to negotiated BLE MTU limits. The bitmap preview scales uniformly to keep QR modules square; smaller heights can reduce QR readability. Text receipt printing retains the original 20-byte / 50-ms pacing.
+
+### MTU and 200-byte graphic benchmark
+
+An nRF Connect Android session with the tested RPP02N reported **ATT MTU 240 bytes** when 517 was requested. A normal ATT Write therefore has a **theoretical maximum application payload of 237 bytes** (MTU minus 3). This measurement applies to that nRF Connect connection; Web Bluetooth does not expose negotiated MTU and may use a different value.
+
+The graphic print UI now offers 150, 200, 220 and 237-byte chunks alongside the original 20, 40 and 100-byte options. These new sizes are experimental until tested with the PWA. Use **Benchmark 200 bytes · 0ms** to select **200-byte chunks, 0ms delay and 360px bitmap height**, then transmit one complete graphic test and log the measured transfer time and throughput. The existing **Print graphic test** button still uses the selected custom settings, and text printing remains at 20 bytes / 50ms.
+
+A previously tested 100-byte / 0ms configuration transmitted 17,293 bytes in 173 writes in approximately 1.35–1.76 seconds across five consecutive visually complete prints. A successful GATT write does not guarantee the entire receipt was printed; inspect the physical output and verify the QR code after each benchmark. If the 200-byte transfer fails, return to the known working 100-byte setting.
