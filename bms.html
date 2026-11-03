@@ -3,13 +3,77 @@
 <style>
 :root{font-family:system-ui,sans-serif;background:#f3f6f7;color:#17212b}*{box-sizing:border-box}body{margin:0;padding:16px}main{max-width:760px;margin:auto}.panel{background:white;border-radius:12px;padding:16px;margin:14px 0;box-shadow:0 2px 10px #0001}button{background:#0f766e;color:white;border:0;border-radius:8px;padding:10px 13px;margin:4px;cursor:pointer}button:disabled{opacity:.5}a{color:#0f766e}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:12px;border-radius:8px;max-height:340px;overflow:auto;font-size:12px}.muted{color:#475569}.device,.char{border:1px solid #cbd5e1;padding:12px;border-radius:8px;margin:8px 0;overflow-wrap:anywhere}input[type=text]{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px}label{display:block;margin:10px 0}
 </style></head><body><main><p><a href="./index.html">← Printer PWA</a></p><h1>🔋 BMS BLE Research</h1><p class="muted">Independent experimental workspace for SP21S001HL21S200A BMS. No printer BLE manager or ESC/POS commands are used. HTTPS and Chrome Android Web Bluetooth required.</p>
-<section class="panel"><h2>Discovery</h2><p>Chrome's chooser may show fewer devices than nRF Connect. Web Bluetooth cannot reveal MAC addresses or perform unrestricted background scans. Pick one device per click; repeat for up to six BMS.</p><button id="pickNamed">Select SP21S001…</button><button id="pickAll">Select any BLE device</button><p id="summary" aria-live="polite">0 selected devices</p><div id="devices"></div></section>
+<section class="panel"><h2>Discovery</h2><p>Chrome's chooser may show fewer devices than nRF Connect. Web Bluetooth cannot reveal MAC addresses or perform unrestricted background scans. Pick one device per click; repeat for up to six BMS.</p><button id="pickNamed">Select SP21S001…</button><button id="pickAll">Select any BLE device</button><div><button id="restoreDevices">Restore permitted devices</button><button id="scannerSupport">Check Scanner Support</button><button id="startScan">Start Live Scan</button><button id="stopScan" disabled>Stop Scan</button></div><p id="scannerState" aria-live="polite">Scanner support not checked.</p><p class="muted">Live Scan is experimental; it may not be available in this Chrome version. Scanner results are not paired or granted GATT access. Select via Chrome picker to connect. No MAC address is exposed.</p><div id="scanResults"></div><p id="summary" aria-live="polite">0 selected devices</p><div id="devices"></div></section>
 <section class="panel"><h2>GATT investigation</h2><p class="muted">Connect a selected BMS and discover browser-permitted services/characteristics. Read and subscribe are offered only when advertised. Writes are deliberately disabled for safety.</p><label for="serviceUUID">Additional GATT service UUID (optional, e.g. 0xFFF0 or full 128-bit UUID)</label><input id="serviceUUID" type="text" placeholder="Known service UUID"><button id="addService">Add UUID for next selection</button><p class="muted">Web Bluetooth requires services to be declared during device selection. Add a UUID, then select the BMS again. Unknown vendor services may not be accessible without their UUID.</p><div id="gatt"></div></section>
 <section class="panel"><h2>JBD Protocol Probe (experimental)</h2><p class="muted">Read-only JBD requests via service FF00 / notify FF01 / write FF02. First connect/inspect a selected BMS, then probe it. No configuration, MOS or protection writes. Do not probe during a firmware update.</p><p id="jbdStatus" aria-live="polite">No BMS selected for probe</p><button id="jbdBasic" disabled>Read basic info (0x03)</button><button id="jbdCells" disabled>Read cell voltages (0x04)</button><pre id="jbdOutput">No validated response yet.</pre></section><section class="panel"><h2>Research log</h2><button id="export">Export JSON</button><button id="clearLog">Clear log</button><pre id="log">Ready.</pre></section>
 </main><script>
 'use strict';
 const $=id=>document.getElementById(id),devices=new Map(),events=[],knownServices=new Set([0x1800,0x1801,0x180A,0x180F,0xFF00]),subscriptions=new Map();
 let jbdActive=null;const jbdSessions=new Map();
+const labelStoreKey='bms-research-labels-v1',scanResults=new Map();let activeScan=null,scanListener=null;
+let savedLabels={};try{savedLabels=JSON.parse(localStorage.getItem(labelStoreKey)||'{}');if(!savedLabels||typeof savedLabels!=='object'||Array.isArray(savedLabels))savedLabels={};}catch(e){savedLabels={};}
+function saveLabels(){try{localStorage.setItem(labelStoreKey,JSON.stringify(savedLabels));}catch(e){record('LABEL_SAVE_ERROR',{message:e.message});}}
+function registerDevice(device){
+ if(!devices.has(device.id)){
+  const entry={device,label:savedLabels[device.id]||'BMS '+(devices.size+1)};
+  devices.set(device.id,entry);
+  device.addEventListener('gattserverdisconnected',()=>{record('DISCONNECTED',{id:device.id});cleanup(device.id);renderDevices();});
+ }
+ return devices.get(device.id);
+}
+function scannerSupported(){return !!(navigator.bluetooth&&typeof navigator.bluetooth.requestLEScan==='function');}
+function renderScanResults(){
+ const root=$('scanResults');root.replaceChildren();
+ for(const [id,e] of scanResults){
+  const div=document.createElement('div');div.className='device';
+  const title=document.createElement('strong');title.textContent=e.name||'Unnamed BLE device';div.append(title);
+  const meta=document.createElement('p');meta.className='muted';meta.textContent='Browser ID: '+id+' · RSSI: '+(e.rssi??'N/A')+' dBm · Last seen: '+e.lastSeen+' · '+e.count+' advertisements';div.append(meta);
+  if(devices.has(id)){const note=document.createElement('p');note.textContent='Already permitted: '+devices.get(id).label;div.append(note);}
+  else{const note=document.createElement('p');note.textContent='Not permitted for GATT — use Select SP21S001…';div.append(note);}
+  root.append(div);
+ }
+}
+function setScanState(message){$('scannerState').textContent=message;}
+async function restoreDevices(){
+ if(!navigator.bluetooth||typeof navigator.bluetooth.getDevices!=='function'){record('RESTORE_UNSUPPORTED');return;}
+ try{
+  const permitted=await navigator.bluetooth.getDevices();
+  for(const device of permitted)registerDevice(device);
+  record('DEVICES_RESTORED',{count:permitted.length,ids:permitted.map(d=>d.id)});
+  renderDevices();renderScanResults();
+ }catch(e){record('RESTORE_ERROR',{name:e.name,message:e.message});}
+}
+$('restoreDevices').addEventListener('click',restoreDevices);
+$('scannerSupport').addEventListener('click',()=>{const supported=scannerSupported();setScanState(supported?'Experimental requestLEScan() available':'requestLEScan() unavailable in this browser');record('SCANNER_SUPPORT',{supported,getDevices:typeof navigator.bluetooth?.getDevices==='function'});});
+$('startScan').addEventListener('click',async()=>{
+ if(!scannerSupported()){setScanState('Live Scanner unsupported; use Chrome picker and Restore permitted devices.');record('SCANNER_UNSUPPORTED');return;}
+ if(activeScan)return;
+ $('startScan').disabled=true;scanResults.clear();renderScanResults();
+ try{
+  // Register before requestLEScan so early advertisements are not lost.
+  scanListener=event=>{
+   if(!event.device||!event.device.name?.startsWith('SP21S001'))return;
+   const id=event.device.id,previous=scanResults.get(id);
+   scanResults.set(id,{name:event.device.name,rssi:event.rssi,lastSeen:now(),count:(previous?.count||0)+1});
+   renderScanResults();
+  };
+  navigator.bluetooth.addEventListener('advertisementreceived',scanListener);
+  activeScan=await navigator.bluetooth.requestLEScan({filters:[{namePrefix:'SP21S001'}],keepRepeatedDevices:true});
+  $('stopScan').disabled=false;setScanState('Scanning for SP21S001…');record('SCAN_STARTED',{filter:'SP21S001'});
+ }catch(e){
+  if(scanListener)navigator.bluetooth.removeEventListener('advertisementreceived',scanListener);
+  scanListener=null;activeScan=null;setScanState('Scan failed: '+e.message);record('SCAN_ERROR',{name:e.name,message:e.message});
+ }finally{$('startScan').disabled=!!activeScan;}
+});
+function stopScan(){
+ if(activeScan){activeScan.stop();activeScan=null;}
+ if(scanListener){navigator.bluetooth.removeEventListener('advertisementreceived',scanListener);scanListener=null;}
+ $('startScan').disabled=false;$('stopScan').disabled=true;
+ setScanState('Scan stopped. '+scanResults.size+' unique browser device IDs observed.');record('SCAN_STOPPED',{count:scanResults.size});
+}
+$('stopScan').addEventListener('click',stopScan);
+window.addEventListener('pagehide',()=>{if(activeScan)stopScan();});
+
 const now=()=>new Date().toISOString(),hex=b=>Array.from(b,v=>v.toString(16).padStart(2,'0')).join(' ').toUpperCase();
 function record(type,details={}){const e={timestamp:now(),type,...details};events.push(e);$('log').textContent+='\n'+e.timestamp+' '+type+' '+JSON.stringify(details);$('log').scrollTop=$('log').scrollHeight;}
 function bytesOf(v){return new Uint8Array(v.buffer,v.byteOffset,v.byteLength);}
@@ -23,9 +87,10 @@ function renderDevices(){
   const info=document.createElement('p');info.className='muted';info.textContent='Browser ID: '+id+' · '+(entry.device.gatt?.connected?'Connected':'Disconnected')+' · Label: '+entry.label;card.append(info);
   addButton(card,'Connect / inspect',()=>inspect(entry));
   addButton(card,'Disconnect',()=>{entry.device.gatt?.disconnect();record('DISCONNECT_REQUEST',{id});renderDevices();});
-  addButton(card,'Set label',()=>{const label=prompt('Local label for this BMS (e.g. BMS 1)',entry.label);if(label!==null){entry.label=label.slice(0,80);record('LABEL_UPDATED',{id,label:entry.label});renderDevices();}});
+  addButton(card,'Set label',()=>{const label=prompt('Local label for this BMS (e.g. BMS 1)',entry.label);if(label!==null){entry.label=label.slice(0,80);savedLabels[id]=entry.label;saveLabels();record('LABEL_UPDATED',{id,label:entry.label});renderDevices();}});
   root.append(card);
  }
+ renderScanResults();
 }
 async function choose(named){
  if(!navigator.bluetooth){record('ERROR',{message:'Web Bluetooth unavailable'});return;}
@@ -35,9 +100,7 @@ async function choose(named){
   record('PICKER_OPEN',{named,optionalServices});
   const device=await navigator.bluetooth.requestDevice(options);
   if(!devices.has(device.id)){
-   const entry={device,label:'BMS '+(devices.size+1)};
-   devices.set(device.id,entry);
-   device.addEventListener('gattserverdisconnected',()=>{record('DISCONNECTED',{id:device.id});cleanup(device.id);renderDevices();});
+   registerDevice(device);
   }
   record('DEVICE_SELECTED',{id:device.id,name:device.name});
   renderDevices();
@@ -189,5 +252,5 @@ $('export').addEventListener('click',()=>{
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bms-ble-research-'+now().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 $('clearLog').addEventListener('click',()=>{events.length=0;$('log').textContent='Log cleared.';});
-renderDevices();
+renderDevices();restoreDevices();
 </script></body></html>
