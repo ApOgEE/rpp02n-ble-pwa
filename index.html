@@ -5,12 +5,12 @@
 <meta name="theme-color" content="#0f766e"><link rel="manifest" href="manifest.webmanifest">
 <title>RPP02N BLE Printer Test</title>
 <style>
-:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f3f6f7}*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:650px;margin:auto}h1{font-size:1.5rem}p{line-height:1.5}.panel{background:white;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000a}button{border:0;border-radius:9px;padding:12px 15px;background:#0f766e;color:white;font-weight:650;margin:4px 5px 4px 0;cursor:pointer}button.secondary{background:#475569}button:disabled{opacity:.45;cursor:not-allowed}textarea{width:100%;min-height:170px;font:15px monospace;padding:12px;border:1px solid #cbd5e1;border-radius:8px}#log{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;min-height:100px;font:12px/1.6 monospace}.muted{color:#475569;font-size:.9rem}#status{font-weight:700}label{display:block;margin:10px 0 5px}nav a{display:inline-block;padding:9px 12px;color:#0f766e;font-weight:700;text-decoration:none}nav a[aria-current]{background:#d1fae5;border-radius:8px}.graphic-preview{display:block;width:100%;max-width:384px;height:auto;border:1px solid #cbd5e1;border-radius:8px;margin:12px auto;image-rendering:pixelated;background:#fff}.graphic-actions{display:flex;flex-wrap:wrap;gap:6px}.graphic-actions button{flex:1 1 150px}
+:root{font-family:system-ui,-apple-system,sans-serif;color:#17212b;background:#f3f6f7}*{box-sizing:border-box}body{margin:0;padding:18px}main{max-width:650px;margin:auto}h1{font-size:1.5rem}p{line-height:1.5}.panel{background:white;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000a}button{border:0;border-radius:9px;padding:12px 15px;background:#0f766e;color:white;font-weight:650;margin:4px 5px 4px 0;cursor:pointer}button.secondary{background:#475569}button:disabled{opacity:.45;cursor:not-allowed}textarea{width:100%;min-height:170px;font:15px monospace;padding:12px;border:1px solid #cbd5e1;border-radius:8px}#log{white-space:pre-wrap;overflow-wrap:anywhere;background:#101827;color:#c7f9e7;padding:14px;border-radius:9px;min-height:100px;font:12px/1.6 monospace}.muted{color:#475569;font-size:.9rem}#status{font-weight:700}label{display:block;margin:10px 0 5px}nav a{display:inline-block;padding:9px 12px;color:#0f766e;font-weight:700;text-decoration:none}nav a[aria-current]{background:#d1fae5;border-radius:8px}.graphic-preview{display:block;width:100%;max-width:384px;height:auto;border:1px solid #cbd5e1;border-radius:8px;margin:12px auto;image-rendering:pixelated;background:#fff}.graphic-actions{display:flex;flex-wrap:wrap;gap:6px}.graphic-actions button{flex:1 1 150px}.ble-settings{border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:12px 0}.ble-settings label{font-weight:650}.ble-settings select{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}.ble-settings output{font-size:.9rem;color:#475569;display:block;margin:8px 0}
 </style>
 </head>
 <body><main><nav class="panel" aria-label="Navigasi"><a href="./index.html" aria-current="page">🖨️ Printer</a> <a href="./gatt.html">🔎 GATT Explorer</a> <a href="./identity.html">🪪 Identity Inspector</a></nav><h1>🖨️ RPP02N — Direct BLE Print</h1><p class="muted">Chrome Android · Web Bluetooth · ESC/POS · Service FF00 / Characteristic FF02</p>
 <section class="panel"><div>Status: <span id="status">Belum disambung</span></div><p class="muted" id="deviceInfo">Printer: RPP02N</p><button id="connect">Connect</button><button id="disconnect" class="secondary" disabled>Disconnect</button></section>
-<section class="panel"><h2>Test print</h2><button id="test" disabled>Print TEST PWA</button><label for="receipt">Teks resit (ASCII untuk ujian pertama)</label><textarea id="receipt">KEDAI SAYA\n------------------------------\nKopi O              RM 2.50\nRoti Canai          RM 1.50\n------------------------------\nTOTAL               RM 4.00\nTerima kasih!</textarea><button id="print" disabled>Print resit</button><h3>Graphic print test</h3><p class="muted">Preview bitmap monokrom 384-dot dengan QR code pautan PWA ini, ikon ringkas, teks dan corak ujian. Grafik dihantar sebagai ESC/POS raster image (GS v 0); sokongan firmware printer perlu diuji.</p><canvas id="graphicPreview" class="graphic-preview" width="384" height="360" role="img" aria-label="Preview resit ujian grafik"></canvas><div class="graphic-actions"><button id="previewGraphic" class="secondary">Refresh preview</button><button id="printGraphic" disabled>Print graphic test</button></div><p class="muted">QR mengandungi https://apogee.github.io/rpp02n-ble-pwa/ . Anggaran penghantaran grafik 384×360 piksel mengambil masa lebih lama daripada teks kerana BLE chunk 20 byte.</p><p class="muted">ESC @ (initialize), teks dan tiga newline. Chunk 20 byte, jeda 50 ms. Tidak termasuk cut atau cash drawer.</p></section>
+<section class="panel"><h2>Test print</h2><button id="test" disabled>Print TEST PWA</button><label for="receipt">Teks resit (ASCII untuk ujian pertama)</label><textarea id="receipt">KEDAI SAYA\n------------------------------\nKopi O              RM 2.50\nRoti Canai          RM 1.50\n------------------------------\nTOTAL               RM 4.00\nTerima kasih!</textarea><button id="print" disabled>Print resit</button><h3>Graphic print test</h3><p class="muted">Preview bitmap monokrom 384-dot dengan QR code pautan PWA ini, ikon ringkas, teks dan corak ujian. Grafik dihantar sebagai ESC/POS raster image (GS v 0); sokongan firmware printer perlu diuji.</p><canvas id="graphicPreview" class="graphic-preview" width="384" height="360" role="img" aria-label="Preview resit ujian grafik"></canvas><fieldset class="ble-settings"><legend><strong>Graphic BLE settings</strong></legend><label for="bleDelay">BLE delay</label><select id="bleDelay"><option value="50">50 ms (default / conservative)</option><option value="20">20 ms</option><option value="10">10 ms</option><option value="5">5 ms (experimental)</option><option value="0">0 ms (experimental)</option></select><label for="bitmapHeight">Bitmap height</label><select id="bitmapHeight"><option value="360">360 px (full layout)</option><option value="240">240 px (compact)</option><option value="160">160 px (minimal)</option></select><label for="bleChunk">BLE chunk size</label><select id="bleChunk"><option value="20">20 bytes (safe default)</option><option value="40">40 bytes (experimental)</option><option value="100">100 bytes (experimental)</option></select><output id="graphicEstimate" aria-live="polite"></output><p class="muted">Chunk &gt;20 bytes mungkin gagal jika MTU tidak mencukupi. Tetapan disimpan pada browser ini sahaja. Jika cetakan terputus, kembali ke 20 bytes / 50 ms.</p></fieldset><div class="graphic-actions"><button id="previewGraphic" class="secondary">Refresh preview</button><button id="printGraphic" disabled>Print graphic test</button></div><p class="muted">QR mengandungi https://apogee.github.io/rpp02n-ble-pwa/ . Anggaran penghantaran grafik 384×360 piksel mengambil masa lebih lama daripada teks kerana BLE chunk 20 byte.</p><p class="muted">ESC @ (initialize), teks dan tiga newline. Chunk 20 byte, jeda 50 ms. Tidak termasuk cut atau cash drawer.</p></section>
 <section class="panel"><h2>Log</h2><div id="log" aria-live="polite"></div><button id="clear" class="secondary">Clear log</button></section>
 <p class="muted">Perlu HTTPS atau localhost. Klik Connect untuk membuka pemilih peranti. Jika nRF Connect masih tersambung, disconnect dahulu. BLE write berjaya tidak semestinya membuktikan kertas telah dicetak.</p>
 </main><script>
@@ -35,14 +35,18 @@ async function connect(){busy=true;refresh();try{
  }catch(e){log('CONNECT ERROR: '+e.message);writer=null;if(device?.gatt?.connected)device.gatt.disconnect();}finally{busy=false;refresh();}}
 function disconnect(){device?.gatt?.disconnect();writer=null;refresh();}
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function send(bytes){if(!connected())throw new Error('Printer tidak disambung');busy=true;refresh();try{
- const chunkSize=20;
+async function send(bytes, options={}){if(!connected())throw new Error('Printer tidak disambung');busy=true;refresh();try{
+ const chunkSize=options.chunkSize??20,delayMs=options.delayMs??50;
+ if(![20,40,100].includes(chunkSize)||![0,5,10,20,50].includes(delayMs))throw Error('Invalid BLE settings');
+ const started=performance.now();
  for(let i=0;i<bytes.length;i+=chunkSize){if(!connected())throw new Error('Sambungan terputus');const chunk=bytes.slice(i,i+chunkSize);
  if(writer.properties.writeWithoutResponse && typeof writer.writeValueWithoutResponse==='function')await writer.writeValueWithoutResponse(chunk);
  else if(writer.properties.write && typeof writer.writeValueWithResponse==='function')await writer.writeValueWithResponse(chunk);
  else throw new Error('Kaedah write tidak tersedia');
- await delay(50);
+ if(delayMs)await delay(delayMs);
  }
+ const elapsed=(performance.now()-started)/1000;
+ log(`Transfer ${elapsed.toFixed(2)}s, ${(bytes.length/elapsed/1024).toFixed(2)} KiB/s, chunk ${chunkSize} bytes, delay ${delayMs}ms.`);
  log(`Sent ${bytes.length} bytes in ${Math.ceil(bytes.length/chunkSize)} chunks. Semak kertas printer.`);
  }catch(e){log('PRINT ERROR: '+e.message);}finally{busy=false;refresh();}}
 function payload(text){const safe=text.replace(/\\n/g,'\n');const encoded=new TextEncoder().encode(safe+'\n\n\n');return Uint8Array.from([0x1b,0x40,...encoded]);}
@@ -81,14 +85,22 @@ const QR_ROWS=`11111110001001000010001111111
 10000010011010011010011111101
 11111110101001011111001010100`.split('\n');
 const QR_URL='https://apogee.github.io/rpp02n-ble-pwa/';
+const graphicSettingsKey='rpp02n-graphic-settings-v1';
+function getGraphicSettings(){return {delayMs:Number($('bleDelay').value),chunkSize:Number($('bleChunk').value),height:Number($('bitmapHeight').value)};}
+function estimateGraphic(){const s=getGraphicSettings();const bytes=384*s.height/8+13;const chunks=Math.ceil(bytes/s.chunkSize);$('graphicEstimate').textContent=`Estimated: ${(bytes/1024).toFixed(1)} KiB, ${chunks} chunks, ${(chunks*s.delayMs/1000).toFixed(1)}s minimum delay (excluding BLE/printer processing).`;}
+function restoreGraphicSettings(){try{const v=JSON.parse(localStorage.getItem(graphicSettingsKey)||'{}');for(const [key,id] of [['delayMs','bleDelay'],['chunkSize','bleChunk'],['height','bitmapHeight']]){if(v[key]!==undefined&&[...$(id).options].some(o=>o.value===String(v[key])))$(id).value=String(v[key]);}}catch(e){log('Settings reset: '+e.message);}estimateGraphic();}
+function updateGraphicSettings(){const s=getGraphicSettings();localStorage.setItem(graphicSettingsKey,JSON.stringify(s));drawGraphic();estimateGraphic();}
 function drawGraphic(){
- const canvas=$('graphicPreview'),ctx=canvas.getContext('2d',{willReadFrequently:true}),w=canvas.width;
+ const canvas=$('graphicPreview'),settings=getGraphicSettings();canvas.height=settings.height;
+ const ctx=canvas.getContext('2d',{willReadFrequently:true}),w=canvas.width;
+ const scale=settings.height/360;
+ ctx.translate((w-w*scale)/2,0);ctx.scale(scale,scale);
  ctx.fillStyle='#fff';ctx.fillRect(0,0,w,canvas.height);ctx.fillStyle='#000';ctx.textAlign='center';
  ctx.font='bold 30px monospace';ctx.fillText('RPP02N',w/2,40);
  ctx.font='15px monospace';ctx.fillText('GRAPHIC PRINT TEST',w/2,64);
  ctx.fillRect(16,76,w-32,2);
  const moduleSize=5,qrSize=29*moduleSize,qx=Math.floor((w-qrSize)/2),qy=91;
- // QR matrix is pre-generated for QR_URL, including four white modules of quiet zone.
+ // QR matrix is pre-generated for QR_URL; scaled preview for shorter bitmap heights.
  for(let y=0;y<29;y++)for(let x=0;x<29;x++)if(QR_ROWS[y][x]==='1')ctx.fillRect(qx+x*moduleSize,qy+y*moduleSize,moduleSize,moduleSize);
  ctx.font='12px monospace';ctx.fillText('SCAN FOR PWA',w/2,251);
  ctx.fillRect(16,263,w-32,2);
@@ -116,8 +128,9 @@ function rasterPayload(canvas){
  return output;
 }
 $('previewGraphic').addEventListener('click',drawGraphic);
-$('printGraphic').addEventListener('click',()=>{drawGraphic();send(rasterPayload($('graphicPreview')));});
-drawGraphic();
+$('printGraphic').addEventListener('click',()=>{drawGraphic();const s=getGraphicSettings();send(rasterPayload($('graphicPreview')),{chunkSize:s.chunkSize,delayMs:s.delayMs});});
+for(const id of ['bleDelay','bitmapHeight','bleChunk'])$(id).addEventListener('change',updateGraphicSettings);
+restoreGraphicSettings();drawGraphic();
 
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(e=>log('SW: '+e.message)));}
 log('Ready. Connect ke RPP02N.');refresh();
