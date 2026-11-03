@@ -110,9 +110,9 @@ function parseJbdFrame(frame){
 function decodeJbd(frame){
  const d=frame.payload,u16=i=>(d[i]<<8)|d[i+1],signed=i=>{const n=u16(i);return n&0x8000?n-0x10000:n;};
  if(frame.register===3){
-  if(d.length<23)throw Error('Basic info payload too short');
+  if(d.length<24)throw Error('Basic info payload too short');
   const count=d[22],temperatures=[];
-  for(let i=0;i<d[22+1]&&23+2*i+1<d.length;i++)temperatures.push(Number((u16(23+2*i)/10-273.15).toFixed(2)));
+  for(let i=0;i<d[23]&&24+2*i+1<d.length;i++)temperatures.push(Number((u16(24+2*i)/10-273.15).toFixed(2)));
   return {voltageV:u16(0)/100,currentA:signed(2)/100,remainingAh:u16(4)/100,nominalAh:u16(6)/100,cycles:u16(8),socPercent:d[19],mosStatus:d[20],cellCount:count,temperatureC:temperatures};
  }
  if(frame.register===4){
