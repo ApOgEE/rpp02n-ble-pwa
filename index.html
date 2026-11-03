@@ -171,5 +171,141 @@ for(const id of ['bleDelay','bitmapHeight','bleChunk'])$(id).addEventListener('c
 restoreGraphicSettings();drawGraphic();
 
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(e=>log('SW: '+e.message)));}
+
+function hexBytes(bytes){return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(' ').toUpperCase();}
+function b64Bytes(bytes){let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s);}
+function downloadJSON(prefix,data){
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=prefix+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function subscribeMonitor(){
+ if(!connected()||manager.monitorBusy)return;
+ manager.monitorBusy=true;refresh();const generation=manager.generation;
+ try{
+  const service=await manager.server.getPrimaryService(0xFF00);
+  for(const id of [0xFF01,0xFF03]){
+   if(generation!==manager.generation||!connected())break;
+   const key='0x'+id.toString(16).toUpperCase();
+   if(manager.subscriptions.has(key))continue;
+   try{
+    const characteristic=await service.getCharacteristic(id);
+    if(!characteristic.properties.notify)throw Error('Notify not supported');
+    const handler=event=>{
+     if(generation!==manager.generation||!connected())return;
+     const v=event.target.value;if(!v)return;
+     const bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength);
+     const record={timestamp:new Date().toISOString(),characteristic:key,byteLength:bytes.length,hex:hexBytes(bytes),base64:b64Bytes(bytes)};
+     notifications.push(record);
+     $('monitorOutput').textContent+=record.timestamp+' '+key+' ('+record.byteLength+' bytes)\nHEX: '+record.hex+'\nBase64: '+record.base64+'\n\n';
+     $('monitorOutput').scrollTop=$('monitorOutput').scrollHeight;
+     eventLog('BLE_NOTIFICATION',{characteristic:key,hex:record.hex,base64:record.base64});
+    };
+    characteristic.addEventListener('characteristicvaluechanged',handler);
+    try{
+     await characteristic.startNotifications();
+     if(generation!==manager.generation||!connected()){
+      characteristic.removeEventListener('characteristicvaluechanged',handler);
+      if(connected())await characteristic.stopNotifications().catch(()=>{});
+      break;
+     }
+     manager.subscriptions.set(key,{characteristic,handler});eventLog('SUBSCRIBED',{characteristic:key});
+    }catch(e){characteristic.removeEventListener('characteristicvaluechanged',handler);throw e;}
+   }catch(e){eventLog('SUBSCRIBE_ERROR',{characteristic:key,error:e.message});}
+  }
+ }catch(e){eventLog('SUBSCRIBE_ERROR',{error:e.message});}
+ finally{manager.monitorBusy=false;refresh();}
+}
+async function unsubscribeMonitor(){
+ if(manager.monitorBusy||!manager.subscriptions.size)return;
+ manager.monitorBusy=true;refresh();
+ const list=[...manager.subscriptions.entries()];manager.subscriptions.clear();
+ for(const [key,{characteristic,handler}] of list){
+  characteristic.removeEventListener('characteristicvaluechanged',handler);
+  try{if(connected())await characteristic.stopNotifications();eventLog('UNSUBSCRIBED',{characteristic:key});}
+  catch(e){eventLog('UNSUBSCRIBE_ERROR',{characteristic:key,error:e.message});}
+ }
+ manager.monitorBusy=false;refresh();
+}
+async function inspectDiagnostics(){
+ if(!connected())return;
+ $('diagBattery').textContent='Unknown';manager.services=[];
+ try{
+  const battery=await manager.server.getPrimaryService(0x180F);
+  const level=await battery.getCharacteristic(0x2A19);
+  if(level.properties.read){const data=await level.readValue();const n=data.getUint8(0);if(n<=100)$('diagBattery').textContent=n+'%';}
+ }catch(e){eventLog('BATTERY_UNAVAILABLE',{reason:e.message});}
+ try{
+  for(const s of await manager.server.getPrimaryServices()){
+   const item={uuid:s.uuid,characteristics:[]};
+   try{for(const ch of await s.getCharacteristics()){
+    const p=ch.properties;item.characteristics.push({uuid:ch.uuid,properties:{read:p.read,write:p.write,writeWithoutResponse:p.writeWithoutResponse,notify:p.notify,indicate:p.indicate}});
+   }}catch(e){item.error=e.message;}
+   manager.services.push(item);
+  }
+  $('diagServices').textContent=JSON.stringify(manager.services,null,2);
+  eventLog('DIAGNOSTICS_COMPLETE',{services:manager.services.length,battery:$('diagBattery').textContent});
+ }catch(e){eventLog('DIAGNOSTICS_ERROR',{error:e.message});}
+}
+async function inspectGATT(){
+ if(!connected())return;
+ const results=$('gattResults');results.replaceChildren();
+ try{
+  for(const service of await manager.server.getPrimaryServices()){
+   const container=document.createElement('div');container.className='gatt-item';
+   const heading=document.createElement('strong');heading.textContent='Service '+service.uuid;container.append(heading);
+   for(const ch of await service.getCharacteristics()){
+    const line=document.createElement('div');line.className='gatt-item';
+    const p=ch.properties;
+    const info=document.createElement('div');info.textContent=ch.uuid+' — '+['read','write','writeWithoutResponse','notify','indicate'].filter(k=>p[k]).join(', ');line.append(info);
+    if(p.read){
+     const button=document.createElement('button');button.textContent='Read';
+     const value=document.createElement('pre');value.className='shared-pre';
+     button.addEventListener('click',async()=>{try{const v=await ch.readValue();const bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength);value.textContent='HEX: '+hexBytes(bytes)+'\nBase64: '+b64Bytes(bytes);eventLog('GATT_READ',{uuid:ch.uuid,hex:hexBytes(bytes)});}catch(e){value.textContent=e.message;}});
+     line.append(button,value);
+    }
+    container.append(line);
+   }
+   results.append(container);
+  }
+  eventLog('GATT_DISCOVERED');
+ }catch(e){eventLog('GATT_ERROR',{error:e.message});}
+}
+const identityFields=[
+ [0x1800,0x2A00,'Device Name'],[0x1800,0x2A01,'Appearance'],
+ [0x180A,0x2A23,'System ID'],[0x180A,0x2A24,'Model Number'],
+ [0x180A,0x2A25,'Serial Number'],[0x180A,0x2A26,'Firmware Revision'],
+ [0x180A,0x2A27,'Hardware Revision'],[0x180A,0x2A28,'Software Revision'],
+ [0x180A,0x2A29,'Manufacturer Name']
+];
+async function inspectIdentity(){
+ if(!connected())return;manager.identity=[];
+ for(const [serviceId,charId,name] of identityFields){
+  const item={name,service:'0x'+serviceId.toString(16),characteristic:'0x'+charId.toString(16)};
+  try{
+   const s=await manager.server.getPrimaryService(serviceId),ch=await s.getCharacteristic(charId);
+   if(!ch.properties.read)throw Error('Not readable');
+   const v=await ch.readValue(),bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength);
+   item.hex=hexBytes(bytes);item.base64=b64Bytes(bytes);
+   if([0x2A00,0x2A24,0x2A25,0x2A26,0x2A27,0x2A28,0x2A29].includes(charId))item.text=new TextDecoder().decode(bytes);
+  }catch(e){item.unavailable=e.message;}
+  manager.identity.push(item);
+ }
+ $('identityResults').textContent=JSON.stringify(manager.identity,null,2);eventLog('IDENTITY_COMPLETE');
+}
+for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>{
+ const tab=button.dataset.tab;
+ for(const el of document.querySelectorAll('.tab-page'))el.hidden=el.id!=='tab-'+tab;
+ for(const b of document.querySelectorAll('[data-tab]'))b.setAttribute('aria-selected',String(b===button));
+});
+$('monitorSubscribe').addEventListener('click',subscribeMonitor);
+$('monitorUnsubscribe').addEventListener('click',unsubscribeMonitor);
+$('monitorClear').addEventListener('click',()=>{notifications.length=0;$('monitorOutput').textContent='Belum ada notification.';});
+$('diagRefresh').addEventListener('click',inspectDiagnostics);
+$('gattRefresh').addEventListener('click',inspectGATT);
+$('identityRefresh').addEventListener('click',inspectIdentity);
+$('diagExport').addEventListener('click',()=>downloadJSON('rpp02n-diagnostics',{device:manager.device?.name,connected:connected(),battery:$('diagBattery').textContent,services:manager.services,notifications,events}));
+$('gattExport').addEventListener('click',()=>downloadJSON('rpp02n-gatt',{services:manager.services,events}));
+$('identityExport').addEventListener('click',()=>downloadJSON('rpp02n-identity',{identity:manager.identity,events}));
+
 log('Ready. Connect ke RPP02N.');refresh();
 </script></body></html>
