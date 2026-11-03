@@ -5,10 +5,11 @@
 </style></head><body><main><p><a href="./index.html">← Printer PWA</a></p><h1>🔋 BMS BLE Research</h1><p class="muted">Independent experimental workspace for SP21S001HL21S200A BMS. No printer BLE manager or ESC/POS commands are used. HTTPS and Chrome Android Web Bluetooth required.</p>
 <section class="panel"><h2>Discovery</h2><p>Chrome's chooser may show fewer devices than nRF Connect. Web Bluetooth cannot reveal MAC addresses or perform unrestricted background scans. Pick one device per click; repeat for up to six BMS.</p><button id="pickNamed">Select SP21S001…</button><button id="pickAll">Select any BLE device</button><p id="summary" aria-live="polite">0 selected devices</p><div id="devices"></div></section>
 <section class="panel"><h2>GATT investigation</h2><p class="muted">Connect a selected BMS and discover browser-permitted services/characteristics. Read and subscribe are offered only when advertised. Writes are deliberately disabled for safety.</p><label for="serviceUUID">Additional GATT service UUID (optional, e.g. 0xFFF0 or full 128-bit UUID)</label><input id="serviceUUID" type="text" placeholder="Known service UUID"><button id="addService">Add UUID for next selection</button><p class="muted">Web Bluetooth requires services to be declared during device selection. Add a UUID, then select the BMS again. Unknown vendor services may not be accessible without their UUID.</p><div id="gatt"></div></section>
-<section class="panel"><h2>Research log</h2><button id="export">Export JSON</button><button id="clearLog">Clear log</button><pre id="log">Ready.</pre></section>
+<section class="panel"><h2>JBD Protocol Probe (experimental)</h2><p class="muted">Read-only JBD requests via service FF00 / notify FF01 / write FF02. First connect/inspect a selected BMS, then probe it. No configuration, MOS or protection writes. Do not probe during a firmware update.</p><p id="jbdStatus" aria-live="polite">No BMS selected for probe</p><button id="jbdBasic" disabled>Read basic info (0x03)</button><button id="jbdCells" disabled>Read cell voltages (0x04)</button><pre id="jbdOutput">No validated response yet.</pre></section><section class="panel"><h2>Research log</h2><button id="export">Export JSON</button><button id="clearLog">Clear log</button><pre id="log">Ready.</pre></section>
 </main><script>
 'use strict';
-const $=id=>document.getElementById(id),devices=new Map(),events=[],knownServices=new Set([0x1800,0x1801,0x180A,0x180F]),subscriptions=new Map();
+const $=id=>document.getElementById(id),devices=new Map(),events=[],knownServices=new Set([0x1800,0x1801,0x180A,0x180F,0xFF00]),subscriptions=new Map();
+let jbdActive=null;const jbdSessions=new Map();
 const now=()=>new Date().toISOString(),hex=b=>Array.from(b,v=>v.toString(16).padStart(2,'0')).join(' ').toUpperCase();
 function record(type,details={}){const e={timestamp:now(),type,...details};events.push(e);$('log').textContent+='\n'+e.timestamp+' '+type+' '+JSON.stringify(details);$('log').scrollTop=$('log').scrollHeight;}
 function bytesOf(v){return new Uint8Array(v.buffer,v.byteOffset,v.byteLength);}
@@ -52,13 +53,15 @@ $('addService').addEventListener('click',()=>{
  else{record('INVALID_UUID',{value:v});return;}
  knownServices.add(uuid);record('SERVICE_UUID_ADDED',{uuid});$('serviceUUID').value='';
 });
-function cleanup(id){for(const [key,item] of subscriptions)if(key.startsWith(id+'|')){item.ch.removeEventListener('characteristicvaluechanged',item.handler);subscriptions.delete(key);}}
+function cleanup(id){const session=jbdSessions.get(id);if(session){if(session.pending){clearTimeout(session.pending.timer);session.pending.reject(Error('Disconnected'));session.pending=null;}session.notify?.removeEventListener('characteristicvaluechanged',session.handler);jbdSessions.delete(id);}if(jbdActive===id){$('jbdBasic').disabled=true;$('jbdCells').disabled=true;$('jbdStatus').textContent='Disconnected — reconnect to probe';}for(const [key,item] of subscriptions)if(key.startsWith(id+'|')){item.ch.removeEventListener('characteristicvaluechanged',item.handler);subscriptions.delete(key);}}
 async function inspect(entry){
  const device=entry.device,id=device.id;
  const root=$('gatt');root.replaceChildren();const title=document.createElement('h3');title.textContent='GATT: '+entry.label;root.append(title);
  try{
   const server=device.gatt.connected?device.gatt:await device.gatt.connect();
   record('CONNECTED',{id,name:device.name});
+  jbdActive=id;$('jbdStatus').textContent='Selected: '+entry.label+' — '+id;
+  $('jbdBasic').disabled=false;$('jbdCells').disabled=false;
   const services=await server.getPrimaryServices();
   record('SERVICES_DISCOVERED',{id,uuids:services.map(s=>s.uuid)});
   if(!services.length)record('NO_ACCESSIBLE_SERVICES',{id,hint:'Try adding vendor service UUID and reselecting device'});
@@ -94,6 +97,93 @@ async function inspect(entry){
   renderDevices();
  }catch(e){record('GATT_ERROR',{id,name:e.name,error:e.message});renderDevices();}
 }
+
+function jbdChecksum(bytes){let sum=0;for(const b of bytes)sum=(sum+b)&0xffff;return (-sum)&0xffff;}
+function parseJbdFrame(frame){
+ const len=frame[3],expected=7+len,got=(frame[4+len]<<8)|frame[5+len];
+ if(frame.length!==expected||frame[0]!==0xdd||frame[expected-1]!==0x77)throw Error('Malformed frame');
+ // JBD RX checksum covers status, length and payload (not echoed register).
+ const calculated=jbdChecksum(frame.slice(2,4+len));
+ if(got!==calculated)throw Error('Checksum mismatch: received '+got.toString(16)+' expected '+calculated.toString(16));
+ return {register:frame[1],status:frame[2],payload:frame.slice(4,4+len),checksum:got};
+}
+function decodeJbd(frame){
+ const d=frame.payload,u16=i=>(d[i]<<8)|d[i+1],signed=i=>{const n=u16(i);return n&0x8000?n-0x10000:n;};
+ if(frame.register===3){
+  if(d.length<23)throw Error('Basic info payload too short');
+  const count=d[22],temperatures=[];
+  for(let i=0;i<d[22+1]&&23+2*i+1<d.length;i++)temperatures.push(Number((u16(23+2*i)/10-273.15).toFixed(2)));
+  return {voltageV:u16(0)/100,currentA:signed(2)/100,remainingAh:u16(4)/100,nominalAh:u16(6)/100,cycles:u16(8),socPercent:d[19],mosStatus:d[20],cellCount:count,temperatureC:temperatures};
+ }
+ if(frame.register===4){
+  if(d.length%2)throw Error('Odd cell voltage payload length');
+  return {cellVoltagesV:Array.from({length:d.length/2},(_,i)=>u16(i*2)/1000)};
+ }
+ return {};
+}
+async function setupJbd(entry){
+ const id=entry.device.id;
+ if(jbdSessions.has(id))return jbdSessions.get(id);
+ const server=entry.device.gatt;
+ if(!server?.connected)throw Error('Connect / inspect the BMS first');
+ const service=await server.getPrimaryService(0xff00);
+ const notify=await service.getCharacteristic(0xff01),writer=await service.getCharacteristic(0xff02);
+ if(!notify.properties.notify&&!notify.properties.indicate)throw Error('FF01 does not support notifications');
+ if(!writer.properties.write&&!writer.properties.writeWithoutResponse)throw Error('FF02 not writable');
+ const session={notify,writer,buffer:[],pending:null};
+ session.handler=event=>{
+  const chunk=bytesOf(event.target.value);record('JBD_RX_CHUNK',{id,hex:hex(chunk)});
+  session.buffer.push(...chunk);
+  if(session.buffer.length>1024){session.buffer=[];record('JBD_RX_OVERFLOW',{id});return;}
+  while(session.buffer.length){
+   const start=session.buffer.indexOf(0xdd);
+   if(start<0){session.buffer=[];break;}
+   if(start)session.buffer.splice(0,start);
+   if(session.buffer.length<4)break;
+   const length=session.buffer[3],total=length+7;
+   if(total>263){session.buffer.shift();record('JBD_BAD_LENGTH',{id,length});continue;}
+   if(session.buffer.length<total)break;
+   const frameBytes=Uint8Array.from(session.buffer.slice(0,total));
+   if(frameBytes[total-1]!==0x77){session.buffer.shift();record('JBD_BAD_END',{id,hex:hex(frameBytes)});continue;}
+   session.buffer.splice(0,total);
+   try{
+    const frame=parseJbdFrame(frameBytes),decoded=frame.status===0?decodeJbd(frame):null;
+    record('JBD_FRAME',{id,register:frame.register,status:frame.status,hex:hex(frameBytes),decoded});
+    $('jbdOutput').textContent=JSON.stringify({id,register:frame.register,status:frame.status,decoded,rawHex:hex(frameBytes)},null,2);
+    const p=session.pending;
+    if(p&&p.register===frame.register){session.pending=null;clearTimeout(p.timer);p.resolve(frame);}
+   }catch(e){record('JBD_FRAME_ERROR',{id,error:e.message,hex:hex(frameBytes)});}
+  }
+ };
+ notify.addEventListener('characteristicvaluechanged',session.handler);
+ try{await notify.startNotifications();}catch(e){notify.removeEventListener('characteristicvaluechanged',session.handler);throw e;}
+ jbdSessions.set(id,session);record('JBD_SUBSCRIBED',{id,service:'0xFF00',notify:'0xFF01',writer:'0xFF02'});return session;
+}
+async function probeJbd(register){
+ const id=jbdActive,entry=devices.get(id);if(!entry)return;
+ const basic=$('jbdBasic'),cells=$('jbdCells');basic.disabled=true;cells.disabled=true;
+ try{
+  const session=await setupJbd(entry);
+  if(session.pending)throw Error('Probe already in progress');
+  session.buffer=[];
+  const checksum=jbdChecksum([register,0]),request=Uint8Array.of(0xdd,0xa5,register,0,checksum>>8,checksum&255,0x77);
+  const response=new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>{session.pending=null;reject(Error('JBD response timeout (3000 ms)'));},3000);
+   session.pending={register,timer,resolve,reject};
+  });
+  record('JBD_READ_TX',{id,register,hex:hex(request)});
+  try{
+   if(session.writer.properties.writeWithoutResponse&&session.writer.writeValueWithoutResponse)await session.writer.writeValueWithoutResponse(request);
+   else await session.writer.writeValueWithResponse(request);
+  }catch(e){const p=session.pending;if(p){session.pending=null;clearTimeout(p.timer);p.reject(e);}response.catch(()=>{});throw e;}
+  const frame=await response;
+  if(frame.status!==0)record('JBD_DEVICE_ERROR',{id,register,status:frame.status});
+ }catch(e){record('JBD_PROBE_ERROR',{id,register,error:e.message});$('jbdOutput').textContent='Probe failed: '+e.message;}
+ finally{const active=devices.get(jbdActive);basic.disabled=cells.disabled=!active?.device.gatt?.connected;}
+}
+$('jbdBasic').addEventListener('click',()=>probeJbd(3));
+$('jbdCells').addEventListener('click',()=>probeJbd(4));
+
 $('export').addEventListener('click',()=>{
  const data={exportedAt:now(),deviceCount:devices.size,devices:[...devices].map(([id,e])=>({id,name:e.device.name,label:e.label,connected:!!e.device.gatt?.connected})),knownServices:[...knownServices],events};
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bms-ble-research-'+now().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
