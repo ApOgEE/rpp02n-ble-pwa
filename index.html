@@ -14,7 +14,7 @@
 <section class="panel"><h2>Log</h2><div id="log" aria-live="polite"></div><button id="clear" class="secondary">Clear log</button></section>
 <p class="muted">Perlu HTTPS atau localhost. Klik Connect untuk membuka pemilih peranti. Jika nRF Connect masih tersambung, disconnect dahulu. BLE write berjaya tidak semestinya membuktikan kertas telah dicetak.</p>
 </div>
-<section id="tab-diagnostics" class="tab-page" hidden><h1>🩺 Printer Diagnostics</h1><p class="muted">Satu sambungan BLE untuk printing dan monitoring. FF01 / FF03 notification kekal aktif ketika bertukar tab. Tiada arahan vendor-specific dihantar.</p><section class="panel"><h2>Status</h2><p>Battery: <strong id="diagBattery">Unknown</strong> · Paper: <strong>Unknown</strong></p><button id="diagRefresh">Refresh diagnostics</button><pre id="diagServices" class="shared-pre">Connect untuk inspect.</pre></section><section class="panel"><h2>Notification Monitor</h2><button id="monitorSubscribe">Subscribe FF01 + FF03</button><button id="monitorUnsubscribe" class="secondary">Unsubscribe</button><span id="monitorStatus" class="muted">Not subscribed</span><pre id="monitorOutput" class="shared-pre">Belum ada notification.</pre><button id="monitorClear" class="secondary">Clear notifications</button></section><section class="panel"><h2>Event history</h2><pre id="eventOutput" class="shared-pre">Belum ada event.</pre><button id="diagExport">Export JSON</button></section></section>
+<section id="tab-diagnostics" class="tab-page" hidden><h1>🩺 Printer Diagnostics</h1><p class="muted">Satu sambungan BLE untuk printing dan monitoring. FF01 / FF03 notification kekal aktif ketika bertukar tab. Tiada arahan vendor-specific dihantar.</p><section class="panel"><h2>Status</h2><p>Battery: <strong id="diagBattery">Unknown</strong> · Paper: <strong>Unknown</strong></p><button id="diagRefresh">Refresh diagnostics</button><pre id="diagServices" class="shared-pre">Connect untuk inspect.</pre></section><section class="panel"><h2>Notification Monitor</h2><button id="monitorSubscribe">Subscribe FF01 + FF03</button><button id="monitorUnsubscribe" class="secondary">Unsubscribe</button><span id="monitorStatus" class="muted">Not subscribed</span><pre id="monitorOutput" class="shared-pre">Belum ada notification.</pre><button id="monitorClear" class="secondary">Clear notifications</button></section><section class="panel"><h2>ESC/POS Status Probe</h2><p class="muted">Experimental: send one DLE EOT query at a time via FF02. Responses, if supported, may arrive on FF01 or FF03. Keep notifications subscribed and compare normal, cover-open and paper-out conditions. These commands may be unsupported by this printer.</p><div id="probeButtons"><button type="button" data-probe="1">DLE EOT 1 · Printer</button><button type="button" data-probe="2">DLE EOT 2 · Offline</button><button type="button" data-probe="3">DLE EOT 3 · Error</button><button type="button" data-probe="4">DLE EOT 4 · Paper</button></div><p class="muted">No automatic retries or polling. Do not send while printing. Record physical paper/cover state separately when comparing exports.</p><pre id="probeOutput" class="shared-pre">No status probes yet.</pre></section><section class="panel"><h2>Event history</h2><pre id="eventOutput" class="shared-pre">Belum ada event.</pre><button id="diagExport">Export JSON</button></section></section>
 <section id="tab-gatt" class="tab-page" hidden><h1>🔎 GATT Explorer</h1><p class="muted">Perkhidmatan yang dibenarkan oleh browser. READ hanya apabila characteristic menyokong read. Subscribe pada FF01/FF03 melalui Diagnostics.</p><section class="panel"><button id="gattRefresh">Refresh GATT</button><div id="gattResults">Belum diperiksa.</div></section><section class="panel"><button id="gattExport">Export JSON</button></section></section>
 <section id="tab-identity" class="tab-page" hidden><h1>🪪 Identity Inspector</h1><p class="muted">Peranti yang sama dengan tab Print. Bacaan standard 0x1800 / 0x180A jika tersedia. Tiada MAC address Web Bluetooth.</p><section class="panel"><button id="identityRefresh">Inspect identity</button><pre id="identityResults" class="shared-pre">Belum diperiksa.</pre><button id="identityExport">Export JSON</button></section></section>
 </main><script>
@@ -33,6 +33,7 @@ function refresh(){
  for(const id of ['test','print','printGraphic','benchmark200'])$(id).disabled=busy||!ok;
  $('previewGraphic').disabled=busy;
  for(const id of ['diagRefresh','gattRefresh','identityRefresh'])$(id).disabled=busy||!ok;
+ for(const b of document.querySelectorAll('[data-probe]'))b.disabled=busy||manager.monitorBusy||!ok;
  $('monitorSubscribe').disabled=busy||manager.monitorBusy||!ok||manager.subscriptions.size===2;
  $('monitorUnsubscribe').disabled=manager.monitorBusy||manager.subscriptions.size===0;
  $('sharedStatus').textContent=ok?'Connected':'Disconnected';
@@ -178,6 +179,21 @@ function downloadJSON(prefix,data){
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=prefix+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+async function statusProbe(n){
+ if(!connected()||busy||manager.monitorBusy||![1,2,3,4].includes(n))return;
+ busy=true;refresh();
+ const bytes=Uint8Array.of(0x10,0x04,n),hex=hexBytes(bytes),started=new Date().toISOString();
+ try{
+  eventLog('STATUS_PROBE_TX',{command:'DLE EOT '+n,hex,subscribed:[...manager.subscriptions.keys()]});
+  $('probeOutput').textContent+=started+' TX '+hex+' (DLE EOT '+n+')\\n';
+  if(manager.writer.properties.writeWithoutResponse&&typeof manager.writer.writeValueWithoutResponse==='function')await manager.writer.writeValueWithoutResponse(bytes);
+  else if(manager.writer.properties.write&&typeof manager.writer.writeValueWithResponse==='function')await manager.writer.writeValueWithResponse(bytes);
+  else throw Error('FF02 write unavailable');
+  eventLog('STATUS_PROBE_TRANSFER_COMPLETE',{command:'DLE EOT '+n,hex});
+ }catch(e){eventLog('STATUS_PROBE_ERROR',{command:'DLE EOT '+n,hex,error:e.message});$('probeOutput').textContent+='ERROR: '+e.message+'\\n';}
+ finally{busy=false;refresh();}
+}
+for(const b of document.querySelectorAll('[data-probe]'))b.addEventListener('click',()=>statusProbe(Number(b.dataset.probe)));
 async function subscribeMonitor(){
  if(!connected()||manager.monitorBusy)return;
  manager.monitorBusy=true;refresh();const generation=manager.generation;
@@ -196,6 +212,7 @@ async function subscribeMonitor(){
      const bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength);
      const record={timestamp:new Date().toISOString(),characteristic:key,byteLength:bytes.length,hex:hexBytes(bytes),base64:b64Bytes(bytes)};
      notifications.push(record);
+     if($('probeOutput'))$('probeOutput').textContent+=record.timestamp+' RX '+key+' '+record.hex+'\\n';
      $('monitorOutput').textContent+=record.timestamp+' '+key+' ('+record.byteLength+' bytes)\nHEX: '+record.hex+'\nBase64: '+record.base64+'\n\n';
      $('monitorOutput').scrollTop=$('monitorOutput').scrollHeight;
      eventLog('BLE_NOTIFICATION',{characteristic:key,hex:record.hex,base64:record.base64});
