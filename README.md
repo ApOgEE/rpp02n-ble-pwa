@@ -12,7 +12,7 @@ A lightweight Progressive Web App (PWA) for **printing ESC/POS receipts directly
 | --- | --- |
 | [Printer](index.html) | Connect to an RPP02N, print a test message, or send a simple ESC/POS text receipt. |
 | [GATT Explorer](gatt.html) | List accessible GATT services and characteristics, read values, subscribe to notifications/indications, and export JSON logs. |
-| [Device Identity Inspector](identity.html) | Read standard identity characteristics such as device name, serial number, system ID, model, firmware and manufacturer **when available**, and export JSON. |
+| [Device Identity Inspector](identity.html) | Read standard identity characteristics such as device name, serial number, system ID, model, firmware and manufacturer **when available**, and export JSON. |\n| [Printer Diagnostics](diagnostics.html) | Read standard BLE Battery Level when available, list permitted GATT service/characteristic metadata and export JSON without vendor writes. |
 
 Built with plain HTML, CSS, and JavaScript. No build tools, backend, or native Android bridge are required.
 
@@ -63,7 +63,7 @@ These characteristics are optional. On the tested RPP02N, Device Name was readab
 ```text
 index.html            Printer and receipt printing
 gatt.html             GATT service and characteristic explorer
-identity.html         Read-only device identity inspector
+identity.html         Read-only device identity inspector\ndiagnostics.html      Read-only printer diagnostics
 manifest.webmanifest  PWA manifest
 sw.js                 Service worker and offline asset cache
 icon.svg              App icon
@@ -105,7 +105,7 @@ The Printer page includes a monochrome 384 × 360 pixel preview with a QR code l
 
 ### Adjustable graphic print settings
 
-Before printing, choose BLE delay (0/5/10/20/50 ms), bitmap height (160/240/360 px), and BLE chunk size (20/40/100/150/200/220/237 bytes) in **Graphic BLE settings**. Defaults are 50 ms, 360 px and 20 bytes. Changes are stored in browser localStorage. A transfer estimate is shown and actual transfer time and throughput are logged after sending. Values above 20 bytes are experimental and may fail due to negotiated BLE MTU limits. The bitmap preview scales uniformly to keep QR modules square; smaller heights can reduce QR readability. Text receipt printing retains the original 20-byte / 50-ms pacing.
+Before printing, choose BLE delay (0/5/10/20/50 ms), bitmap height (160/240/360 px), and BLE chunk size (20/40/100/150/200/220/237 bytes) in **Graphic BLE settings**. Defaults are 50 ms, 360 px and 20 bytes. Changes are stored in browser localStorage. A transfer estimate is shown and actual transfer time and throughput are logged after sending. Chunk sizes above 20 bytes depend on negotiated BLE MTU and printer behavior; 100 and 237 bytes were tested successfully on the documented unit. The bitmap preview scales uniformly to keep QR modules square; smaller heights can reduce QR readability. Text receipt printing retains the original 20-byte / 50-ms pacing.
 
 ### MTU and 200-byte graphic benchmark
 
@@ -114,3 +114,28 @@ An nRF Connect Android session with the tested RPP02N reported **ATT MTU 240 byt
 The graphic print UI now offers 150, 200, 220 and 237-byte chunks alongside the original 20, 40 and 100-byte options. These new sizes are experimental until tested with the PWA. Use **Benchmark 200 bytes · 0ms** to select **200-byte chunks, 0ms delay and 360px bitmap height**, then transmit one complete graphic test and log the measured transfer time and throughput. The existing **Print graphic test** button still uses the selected custom settings, and text printing remains at 20 bytes / 50ms.
 
 A previously tested 100-byte / 0ms configuration transmitted 17,293 bytes in 173 writes in approximately 1.35–1.76 seconds across five consecutive visually complete prints. A successful GATT write does not guarantee the entire receipt was printed; inspect the physical output and verify the QR code after each benchmark. If the 200-byte transfer fails, return to the known working 100-byte setting.
+
+## Verified 237-byte BLE graphic benchmark (2026-11-03)
+
+The tested device is labelled **MP-58N** (58 mm paper, 5V/1A) and advertises as **RPP02N** over BLE. In a separate nRF Connect Android connection, a requested MTU of 517 resulted in **ATT MTU 240**, corresponding to a theoretical **237-byte ATT Write payload**. The PWA cannot directly inspect its negotiated MTU.
+
+Five consecutive **384 × 360 px** graphic receipts were sent through Web Bluetooth using characteristic `0xFF02`, `writeWithoutResponse`, **237-byte chunks**, and **0ms added delay**. Each transfer was **17,293 bytes in 73 writes**.
+
+| Print | Transfer time | Throughput |
+| --- | ---: | ---: |
+| 1 | 1.21 s | 13.93 KiB/s |
+| 2 | 1.21 s | 13.95 KiB/s |
+| 3 | 1.14 s | 14.75 KiB/s |
+| 4 | 1.26 s | 13.42 KiB/s |
+| 5 | 1.24 s | 13.61 KiB/s |
+| **Average** | **1.21 s** | **13.93 KiB/s** |
+
+**Observed physical result:** all five receipts printed completely and **all five QR codes scanned successfully**. This is a device/browser-specific observation, not a universal printer capability guarantee. The earlier tested 100-byte / 0ms configuration averaged approximately 1.47 s over five consecutive prints. The 237-byte setting is approximately **18% faster in measured BLE transfer time**. Neither metric includes mechanical print completion time.
+
+**Recommended for this tested setup:** 237 bytes / 0ms for fast graphic printing, with 100 bytes / 0ms as a tested fallback and 20 bytes / 50ms as the conservative default. Other devices, connections, browsers or printer firmware may need smaller chunks.
+
+## Printer Diagnostics (read-only)
+
+The [Printer Diagnostics](diagnostics.html) page connects to an RPP02N with optional permission for standard **Battery Service `0x180F`** and printer service `0xFF00`. If Battery Level characteristic `0x2A19` exists, is readable, and returns a value in the 0–100 range, the page displays the percentage. Otherwise it explicitly displays **Unknown** and the reason in the diagnostic log.
+
+The page also lists **permitted** GATT service UUIDs, characteristic UUIDs and properties without reading vendor-specific values, and can export a JSON snapshot and log. Web Bluetooth may not reveal all services. **Paper-out, charging and printer error states are shown as Unknown** until a verified response protocol is available; the page does not send ESC/POS status queries, subscribe to vendor notifications, or perform vendor-specific writes. Disconnect other BLE clients before inspecting the printer.
