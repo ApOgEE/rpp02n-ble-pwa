@@ -98,3 +98,7 @@ Issues and pull requests are welcome. Include your browser, operating system, BL
 ## License
 
 This repository currently has no license file. Do not assume that its code is licensed for redistribution or reuse unless the maintainer adds an explicit license.
+
+## Graphic print test
+
+The Printer page includes a monochrome 384 × 360 pixel preview with a QR code linking to the hosted PWA, simple battery/power/Bluetooth icons, and a formatted heading. **Refresh preview** regenerates the bitmap and **Print graphic test** sends an ESC/POS `GS v 0` raster image through the existing `0xFF02` BLE characteristic using 20-byte chunks with 50 ms pacing. The QR matrix is embedded for the project's fixed GitHub Pages URL, so no external QR service is required. The graphic print path is experimental: support for `GS v 0` depends on the RPP02N firmware, and transmission can take approximately a minute. The preview is not a guarantee of printer output.
